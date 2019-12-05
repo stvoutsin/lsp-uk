@@ -1,0 +1,270 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2019, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+########################################################
+## Installing LSP (with Helm/Kubernetes) on Openstack ##
+########################################################
+
+## Create two nodes (stv-k8s-master / stv-k8s-worker)
+
+
+## On Both nodes: 
+
+	## Update & install curl
+
+	sudo apt-get update
+	sudo apt install curl
+
+
+
+
+	## Install Docker
+
+	sudo apt install docker.io
+	sudo systemctl enable docker
+
+
+
+
+	## Get Kubernetes
+
+	curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add
+	sudo apt-add-repository "deb http://apt.kubernetes.io/ kubernetes-xenial main"
+	sudo apt install -y kubeadm
+
+
+
+
+	## Disable swap memory (if running) on both the nodes
+
+	sudo swapoff -a
+
+
+
+## [Master Node] Initialize kubernetes on Master Node
+
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+
+
+## [Worker Node] Initialize kubernetes on Master Node
+
+kubeadm join ip:6443 --token w136..j \
+    --discovery-token-ca-cert-hash sha256:8907..3e6bece 
+
+
+
+
+## [Master Node] Check Nodes
+
+sudo kubectl get nodes
+NAME             STATUS     ROLES    AGE     VERSION
+stv-k8s-master   NotReady   master   2m10s   v1.16.3
+stv-k8s-worker   NotReady   <none>   95s     v1.16.3
+
+
+
+## [Master Node] Flannel Network
+
+sudo kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+
+
+## [Master Node] Get LSP project from Github
+
+git clone https://github.com/lsst-sqre/lsp-deploy.git
+
+pushd lsp-deploy/develop-gke/
+    nano nublado-values.yaml
+        ..
+        oauth_client_id: '${github_username}'
+	oauth_secret: '${github_secret}'
+        ..
+
+popd
+
+
+
+## [Master Node]  Install Helm (version 2.9.1)
+
+nano ~/install_helm.sh 
+
+..
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+    echo "usage: $0 VERSION" 1>&2
+    exit 1
+fi
+version=$1
+
+curl -fSL https://storage.googleapis.com/kubernetes-helm/helm-v${version}-linux-amd64.tar.gz | tar xz -C /usr/local/bin/ --strip-components=1 linux-amd64/helm
+
+
+..
+
+chmod +x ~/install_helm.sh
+sudo ./install_helm.sh 2.9.1
+
+
+
+helm version
+  > Client: &version.Version{SemVer:"v2.9.1", GitCommit:"20adb27c7c5868466912eebdf6664e7390ebe710", GitTreeState:"clean"}
+
+
+
+## [Master Node]  Install LSP
+
+pushd lsp-deploy/develop-gke/
+
+   ## Create Certificates 
+  sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/apache-selfsigned.key -out /etc/ssl/certs/apache-selfsigned.crt
+  sudo scp -r /etc/ssl/private/ . 
+  sudo scp -r /etc/ssl/certs/apache-selfsigned.crt private/ 
+  sudo chown ubuntu:root private/
+
+
+  ## Do we need these?
+  kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+clusterrolebinding.rbac.authorization.k8s.io/tiller-cluster-rule created
+
+  helm init --service-account tiller --override spec.selector.matchLabels.'name'='tiller',spec.selector.matchLabels.'app'='helm' --output yaml | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@' | kubectl apply -f -
+
+   ## Install Tiller
+   sudo ./install_tiller.sh
+
+   ## Install ingress
+   sudo ./install_ingress.sh private/apache-selfsigned.crt private/apache-selfsigned.key 
+
+   sudo ./public_ip.sh
+
+ 
+   sudo ./install_lsp.sh
+
+popd
+
+
+helm ls --all
+NAME      	REVISION	UPDATED                 	STATUS  	CHART               	NAMESPACE
+fileserver	1       	Wed Dec  4 13:56:13 2019	DEPLOYED	fileserver-0.2.1    	default  
+firefly   	1       	Wed Dec  4 13:52:19 2019	DEPLOYED	firefly-0.1.0       	firefly  
+nginx     	1       	Wed Dec  4 12:39:07 2019	DEPLOYED	nginx-ingress-1.26.1	nginx    
+nublado   	1       	Wed Dec  4 13:49:36 2019	DEPLOYED	nublado-0.3.5       	nublado  
+tap       	1       	Wed Dec  4 13:52:16 2019	DEPLOYED	cadc-tap-0.1.2      	tap  
+
+
+
+## [Master Node]  Deploy Kubernetes Dashboard
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta6/aio/deploy/recommended.yaml
+
+
+
+
+## [Local Machine] Kubernetes Dashboard Web GUI 
+
+ssh -L 8080:127.0.0.1:8001 stv-k8s-master
+
+
+
+
+## [Master Node] If we want to create Admin user (Probably dont need this step)
+
+nano dashboard-adminuser.yaml
+
+..
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-user
+  namespace: kubernetes-dashboard
+
+
+
+kubectl apply -f dashboard-adminuser.yaml
+kubectl -n kubernetes-dashboard describe secret $(kubectl -n kubernetes-dashboard get secret | grep admin-user | awk '{print $1}')
+
+
+
+
+## [Master Node] Start Dashboard Proxy
+
+sudo kubectl proxy
+ > Starting to serve on 127.0.0.1:8001
+
+
+
+## [Local Machine] Tunnel Connection to Dashboard
+
+
+ssh -L 8001:127.0.0.1:8080 stv-k8s-master
+
+# Go to: 
+# http://localhost:8080/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login
+# Use "tiller" token
+
+
+kubectl -n kube-system describe secret 
+
+	..
+	Name:         tiller-token-rwc98
+	Namespace:    kube-system
+	Labels:       <none>
+	Annotations:  kubernetes.io/service-account.name: tiller
+		      kubernetes.io/service-account.uid: 
+
+	Type:  kubernetes.io/service-account-token
+
+	Data
+	====
+	ca.crt:     1025 bytes
+	namespace:  11 bytes
+	token:      eyJhbGc  ..  UgW6A
+
+
+
+
+## [Local Machine] Tunnel Connection to Firefly/Nublado/TAP
+
+pod_ip=
+ssh -L 8081:${pod_ip:?}:8080 stv-k8s-master
+
+
+# Go to: 
+# http://localhost:8081/suit
+# Not sure why "suit"
+
+
