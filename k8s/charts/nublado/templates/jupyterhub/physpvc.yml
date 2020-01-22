@@ -1,0 +1,2 @@
+{{ if .Values.hub.persistent_home }}
+{{ end }}

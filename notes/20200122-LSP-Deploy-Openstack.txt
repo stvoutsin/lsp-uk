@@ -100,7 +100,7 @@ git clone https://github.com/lsst-sqre/lsp-deploy.git
 pushd lsp-deploy/develop-gke/
     nano nublado-values.yaml
         ..
-        oauth_client_id: '${github_username}'
+        oauth_client_id: '${github_client_id}'
 	oauth_secret: '${github_secret}'
         ..
 
@@ -267,5 +267,17 @@ ssh -L 8081:${pod_ip:?}:8080 stv-k8s-master
 # Go to: 
 # http://localhost:8081/suit
 # Not sure why "suit"
+
+
+
+
+## Nublado & Fileserver not working, probably because they require an NFS or similar storage system.
+
+## Let's create a temp localhost claim (PVC) & storage as described here:
+   https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/
+
+## We can now use these, and redeploy the nublado helm chart, by replacing any references to the nublado (fileserver) storage claims, with the claims created here
+## For example see the charts/nublado folder 
+
 
 

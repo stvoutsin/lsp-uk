@@ -1,0 +1,176 @@
+cilogon_group_denylist: ""
+cilogon_group_whitelist: ""
+dask:
+  allow_spawn: "true"
+  max_workers: 25
+  restrict_nodes: ""
+debug: "true"
+github_organization_denylist: ""
+github_organization_whitelist: ""
+hub:	
+  uid: 0
+  fsGid: 0
+  gid: 768
+  image: lsstsqre/sciplat-hub:latest
+  #persistent_home: true
+  uid: 768
+jupyterhub_config: |
+  '''Runtime configuration for JupyterHub in the LSST environment.
+  '''
+
+  import jupyterhubutils
+  import logging
+  import jupyterhub.auth as auth
+  #from dummyauthenticator import DummyAuthenticator
+
+  # get_config() only works in the Hub configuration environment
+  c = get_config()
+
+  lc = jupyterhubutils.LSSTConfig()
+  jupyterhubutils.configure_auth_and_spawner(lc)
+  jhu_logger = jupyterhubutils.utils.make_logger(name='jupyterhubutils')
+  if lc.debug:
+      jhu_logger.setLevel(logging.DEBUG)
+      jhu_logger.debug("Enabling 'jupyterhubutils' debug-level logging.")
+      jhu_logger.warning("If there's not a prior debug log something is wrong.")
+
+  # Set up the spawner
+  c.JupyterHub.spawner_class = lc.spawner_class
+
+  # Set up the authenticator
+  #c.JupyterHub.authenticator_class = lc.authenticator_class
+  c.JupyterHub.authenticator_class = auth.DummyAuthenticator
+  c.LocalAuthenticator.create_system_users=True
+  c.Authenticator.whitelist = {'test', 'admin', 'jovyan'}
+  c.Authenticator.admin_users = {'admin'}
+
+  #c.DummyAuthenticator.password = "pass"
+
+  # Don't try to cleanup servers on exit - since in general for k8s, we want
+  # the hub to be able to restart without losing user containers
+  c.JupyterHub.cleanup_servers = False
+
+  # Set Session DB URL if we have one
+  db_url = lc.session_db_url
+  if db_url:
+      c.JupyterHub.db_url = db_url
+  # Allow style overrides
+  c.JupyterHub.template_paths = ["/opt/lsst/software/jupyterhub/templates/"]
+
+  # Set Hub networking/routing parameters
+  hub_route = lc.hub_route
+  if hub_route != '/':
+      c.JupyterHub.base_url = lc.hub_route
+
+  # Set the Hub URLs
+  c.JupyterHub.bind_url = lc.bind_url
+  c.JupyterHub.hub_bind_url = lc.hub_bind_url
+  c.JupyterHub.hub_connect_url = lc.hub_connect_url
+
+  # External proxy
+  c.ConfigurableHTTPProxy.should_start = False
+  c.ConfigurableHTTPProxy.api_url = lc.proxy_api_url
+lab:
+  cull_policy: age:remote
+  cull_timeout: 43200
+  image:
+    cachefile: /tmp/repo-cache.json
+    dailies: 3
+    experimentals: 0
+    releases: 1
+    repo_host: ""
+    repo_name: sciplat-lab
+    repo_owner: lsstsqre
+    weeklies: 2
+  image_name: ""
+  repos: https://github.com/lsst-sqre/notebook-demo
+  resources:
+    cpu_guarantee: 0.02
+    cpu_limit: 1
+    mem_guarantee: 64K
+    mem_limit: 2048M
+    size_index: 1
+    size_range: 4
+  restrict_nodes: ""
+mountpoints: |
+  [
+    {
+      "mountpoint": "/home",
+      "mode": "rw",
+      "fileserver-export": "/home",
+      "fileserver-host": ""
+    },
+    {
+      "mountpoint": "/datasets",
+      "fileserver-export": "/datasets",
+      "fileserver-host": ""
+    },
+    {
+      "mountpoint": "/software",
+      "fileserver-export": "/software",
+      "fileserver-host": ""
+    },
+    {
+      "mountpoint": "/project",
+      "mode": "rw",
+      "fileserver-export": "/project",
+      "fileserver-host": ""
+    },
+    {
+      "mountpoint": "/scratch",
+      "mode": "rw",
+      "fileserver-export": "/scratch",
+      "fileserver-host": ""
+    }
+  ]
+#oauth_provider: github
+prepuller:
+  gid: 769
+  minute_to_run: 35
+  uid: 769
+proxy:
+  ingress:
+    annotations: []
+    host: ""
+  max_http_header_size: 16384
+resourcemap: |
+  [
+    { "disabled": true,
+      "user": "Username for user with custom resources",
+      "group": "Groupname for group with custom resources",
+      "resources": {
+        "size_index": "integer representing which size container is default: 0 is smallest",
+        "mem_quota": "integer, namespace quota size in MB",
+        "cpu_quota": "integer, namespace quota CPU limit"
+      }
+    }
+  ]
+routes:
+  api: /api
+  external:
+    api: ""
+    fileserver: ""
+    firefly: ""
+    hub: ""
+    instance: ""
+    js9: ""
+    soda: ""
+  firefly: /portal/app/
+  hub: /nb
+  js9: /js9
+  soda: /api/soda
+  tap: /api/tap
+scheme: http://
+signing_certificate: |
+  -----BEGIN PUBLIC KEY-----
+  MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3ALFUwJelCzi8FmGMOtK
+  zbDj03mhGE/EslZ75/SpCgAeBbow44Wt3E+NqY1QGmadY+pRsl5G7ahtiAZscvij
+  Vx+1BfEyOx6HbXBZzDmVpNxELnagw+8OsH2JBJxeHjcbwZ7N+b3guwtHdSHLZmMx
+  yBw/57OqYwfdAOjswFM4sUCwWo7ZkpGsVxeqQTflqMgJRBDKTtMk2Vjx6fwvP1x9
+  uTxT9TIUseCngIYo64fVdQw0y/o6m0FrLM2N2F3E4KWkbUlTbisKcTWealKuX3Oz
+  UgDtpFHI+BUNgVakNgk0B4/G6mNnz1goZAn3JKZS8bAd5Au9x1O3ZPb9FkNn5xxN
+  3wIDAQAB
+  -----END PUBLIC KEY-----
+vault_secrets:
+  enabled: false
+  path: ""
