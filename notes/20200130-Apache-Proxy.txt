@@ -103,6 +103,12 @@ sudo nano /etc/apache2/sites-available/000-default.conf
         ProxyPass /firefly/ http://10.0.0.10:32276/ connectiontimeout=300 timeout=300
         ProxyPassReverse /firefly/ http://10.0.0.10:32276/
 
+ 	RewriteEngine On
+  	RewriteCond %{HTTP:Upgrade} =websocket [NC]
+  	RewriteRule /(.*)           ws://10.0.0.10:32276/$1 [P,L]
+  	RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+  	RewriteRule /(.*)           http://10.0.0.10:32276/$1 [P,L]
+
 
 </VirtualHost>
 

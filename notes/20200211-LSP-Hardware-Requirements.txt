@@ -1,0 +1,92 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2019, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+#-----------------------------------------------------------------------------
+
+# Hardware Specification for deploying LSP on a Kubernetes cluster on Openstack
+
+#-----------------------------------------------------------------------------
+
+The following roughly describes an outline of the hardware specifications required to setup a deployment of the LSP on Openstack
+
+
+#-----------------#
+# Number of Nodes #
+#-----------------#
+
+At least 3 nodes
+   1 Master node
+   2 Worker nodes
+
+
+#-----#
+# CPU #
+#-----#
+
+At least 2, but ideally 4 VCores
+
+
+#----------#
+# Storage  #
+#----------#
+
+At least 100GB, ideally 200GB volume storage
+
+The LSP stack includes a "fileserver" service which is a "A simple NFSv4 fileserver that provides shared storage for home directories and data".
+For distributed storage we could experiment with that (not working at the moment), or setup our own NFS server.
+
+#-----#
+# RAM #
+#-----#
+
+No specific requirements, but 2GB or more per node should suffice
+
+
+
+#------------#
+# Networking #
+#----------- #
+
+Public IPs:
+   At least 1 Public IP, ideally 2 or more (1 per service)
+   If we have one public IP, we can create a Gateway Apache proxy node with a public IP, and setup reverse proxies to the different services 
+   (http://public_ip/nublado, http://public_ip/tap, http://public_ip/firefly ..)
+
+Networking considerations:
+   All worker & master nodes need to be on the same private network, to be able to access each other
+	
+
+
+#-----------------------------------------#
+# Virtualization & Application Deployment #
+#---------------------------------------- #
+
+All of the LSP applications and required services will be setup as containers using Kubernetes, and Helm charts
+
+
+#------------------#
+# Operating System #
+#------------------#
+
+Ubuntu 18.04.3 LTS (Bionic)
+ (Not a requirement, but development work has being done on this)
