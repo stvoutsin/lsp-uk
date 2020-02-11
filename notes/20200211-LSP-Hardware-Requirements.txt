@@ -34,10 +34,10 @@ The following roughly describes an outline of the hardware specifications requir
 # Number of Nodes #
 #-----------------#
 
-At least 3 nodes
+At least 4 nodes
    1 Master node
    2 Worker nodes
-
+   1 Proxy/Gateway node
 
 #-----#
 # CPU #
