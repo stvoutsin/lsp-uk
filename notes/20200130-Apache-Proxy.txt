@@ -39,15 +39,17 @@
 # -----------------------------
 # Install Apache
 # -----------------------------
+sudo apt-get install -y apache2
+sudo apt-get install -y libapache2-mod-proxy-html libxml2-dev
+  # for ubuntu bionic:  sudo apt-get install -y libapache2-mod-proxy-uwsgi-dbg libapache2-mod-proxy-uwsgi
 
-sudo apt-get install install -y libapache2-mod-proxy-html libxml2-dev
-sudo a2enmod proxy
-sudo apt-get install apache2
 sudo apache2ctl configtest
 sudo a2enmod proxy
 sudo a2enmod proxy_http
 sudo a2enmod proxy_balancer
 sudo a2enmod lbmethod_byrequests
+sudo a2enmod proxy rewrite proxy_http proxy_wstunnel
+
 
 
 
@@ -95,19 +97,23 @@ sudo nano /etc/apache2/sites-available/000-default.conf
         # after it has been globally disabled with "a2disconf".
         #Include conf-available/serve-cgi-bin.conf
 
+        ProxyRequests Off
         ProxyPreserveHost On
 
-        ProxyPass /nublado/ http://10.0.0.10:31427/ connectiontimeout=300 timeout=300
-        ProxyPassReverse /nublado/ http://10.0.0.10:31427/
+        ProxyTimeout 6000
+        Timeout 6000
+        ProxyReceiveBufferSize 2048
 
-        ProxyPass /firefly/ http://10.0.0.10:32276/ connectiontimeout=300 timeout=300
-        ProxyPassReverse /firefly/ http://10.0.0.10:32276/
+        ## PROXY ENTRIES HERE ##
+        ProxyPassMatch    ^/nublado\/(.*)$  http://192.168.0.9:32229/suit/$1
+        ProxyPassReverse  ^/nublado\/(.*)$  http://192.168.0.9:32229/suit/$1
 
- 	RewriteEngine On
-  	RewriteCond %{HTTP:Upgrade} =websocket [NC]
-  	RewriteRule /(.*)           ws://10.0.0.10:32276/$1 [P,L]
-  	RewriteCond %{HTTP:Upgrade} !=websocket [NC]
-  	RewriteRule /(.*)           http://10.0.0.10:32276/$1 [P,L]
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} =websocket [NC]
+        RewriteRule ^/nublado\/(.*)           ws://192.168.0.9:32229/suit/$1 [P,L]
+        RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+        RewriteRule ^/nublado\/(.*)           http://192.168.0.9:32229/suit/$1 [P,L]
+
 
 
 </VirtualHost>

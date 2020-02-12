@@ -25,7 +25,7 @@
 ########################################################
 
 ## Create gateway node, give it a public ip
-## Create two nodes (stv-dev-master / stv-dev-worker)
+## Create three nodes (stv-dev-master / stv-dev-worker / stv-dev-worker-2)
 ## Set local machine configuration with proxies to the gatway and the cluster nodes
 
 nano ~/.ssh/config
@@ -37,6 +37,12 @@ Host lsp-gateway
     Hostname ..
 
 Host lsp-worker
+    User user
+    IdentityFile ~/.ssh/key
+    Hostname ..
+    ProxyCommand ssh -W %h:%p lsp-gateway
+
+Host lsp-worker-2
     User user
     IdentityFile ~/.ssh/key
     Hostname ..
@@ -101,6 +107,9 @@ sudo kubeadm init --pod-network-cidr=10.244.0.0/16
 
 	kubeadm join 192.168.0.10:6443 --token ...  \
 	    --discovery-token-ca-cert-hash sha256:...
+
+
+kubeadm token create rv4pfo.16a6dqodp1vi6qhs --print-join-command --ttl=0
 
 ..
 
@@ -249,7 +258,195 @@ pushd lsp-deploy/develop-gke/
 	ubuntu@stv-dev-master:~/lsp-deploy/develop-gke$ cat install_lsp.sh 
     .. 
 
+   sudo ./uninstall_lsp.sh
+
+   ## Had to delete from k8s Dashboard
+
    ## Let's install all the services individually
+   ## Note: We can also grab the templates from ~/.helm/cache/archive/ and install from those, if we want to edit the configuration
+
+
+   ## sudo helm install lsstsqre/fileserver --name fileserver --namespace fileserver
+
+	NAME:   fileserver
+	LAST DEPLOYED: Tue Feb 11 20:31:35 2020
+	NAMESPACE: fileserver
+	STATUS: DEPLOYED
+
+	RESOURCES:
+	==> v1/Pod(related)
+	NAME                         READY  STATUS   RESTARTS  AGE
+	fileserver-68f8cbd485-4v2xr  0/1    Pending  0         0s
+
+	==> v1beta1/StorageClass
+	NAME  PROVISIONER           AGE
+	fast  kubernetes.io/gce-pd  1s
+
+	==> v1/PersistentVolumeClaim
+	NAME                STATUS   VOLUME  CAPACITY  ACCESS MODES  STORAGECLASS  AGE
+	fileserver-physpvc  Pending  fast    1s
+
+	==> v1/Service
+	NAME        TYPE       CLUSTER-IP     EXTERNAL-IP  PORT(S)                     AGE
+	fileserver  ClusterIP  10.102.237.37  <none>       2049/TCP,20048/TCP,111/TCP  1s
+
+	==> v1/Deployment
+	NAME        DESIRED  CURRENT  UP-TO-DATE  AVAILABLE  AGE
+	fileserver  1        1        1           0          0s
+
+
+   ## Install TAP
+   sudo helm install lsstsqre/cadc-tap --name tap --namespace tap
+	NAME:   tap
+	LAST DEPLOYED: Tue Feb 11 20:18:06 2020
+	NAMESPACE: tap
+	STATUS: DEPLOYED
+
+	RESOURCES:
+	==> v1/Secret
+	NAME                  TYPE    DATA  AGE
+	tap-cadc-tap-secrets  Opaque  2     1s
+
+	==> v1/Service
+	NAME                        TYPE       CLUSTER-IP      EXTERNAL-IP  PORT(S)   AGE
+	qserv-master01              ClusterIP  10.108.143.195  <none>       4040/TCP  1s
+	tap-cadc-tap-tap-schema-db  ClusterIP  10.104.58.194   <none>       3306/TCP  1s
+	tap-cadc-tap-tap-server     ClusterIP  10.107.211.225  <none>       80/TCP    1s
+	tap-cadc-tap-uws-db         ClusterIP  10.107.5.242    <none>       5432/TCP  1s
+
+	==> v1/Deployment
+	NAME                        DESIRED  CURRENT  UP-TO-DATE  AVAILABLE  AGE
+	tap-cadc-tap-mock-qserv     1        1        1           0          0s
+	tap-cadc-tap-querymonkey    0        0        0           0          0s
+	tap-cadc-tap-tap-server     1        1        1           0          0s
+	tap-cadc-tap-tap-schema-db  1        1        1           0          0s
+	tap-cadc-tap-uws-db         1        1        1           0          0s
+
+	==> v1beta1/Ingress
+	NAME                                HOSTS  ADDRESS  PORTS  AGE
+	tap-cadc-tap-anonymous-ingress      *      80       0s
+	tap-cadc-tap-authenticated-ingress  *      80       0s
+
+	==> v1/Pod(related)
+	NAME                                         READY  STATUS             RESTARTS  AGE
+	tap-cadc-tap-mock-qserv-85d5b5fd8-krwh7      0/1    ContainerCreating  0         0s
+	tap-cadc-tap-tap-server-7b546c5b4f-6jz65     0/1    ContainerCreating  0         0s
+	tap-cadc-tap-tap-schema-db-7f454d4587-hbxl8  0/1    ContainerCreating  0         0s
+	tap-cadc-tap-uws-db-7bd577cdcd-g6bcx         0/1    ContainerCreating  0         0s
+
+
+   ## Install Firefly
+   sudo helm install lsstsqre/firefly --name firefly --namespace firefly
+
+	NAME:   firefly
+	LAST DEPLOYED: Tue Feb 11 20:24:04 2020
+	NAMESPACE: firefly
+	STATUS: DEPLOYED
+
+	RESOURCES:
+	==> v1/Deployment
+	NAME           DESIRED  CURRENT  UP-TO-DATE  AVAILABLE  AGE
+	firefly        1        1        1           0          1s
+	firefly-redis  1        1        1           0          1s
+
+	==> v1beta1/Ingress
+	NAME     HOSTS  ADDRESS  PORTS  AGE
+	firefly  *      80       1s
+
+	==> v1/Pod(related)
+	NAME                            READY  STATUS             RESTARTS  AGE
+	firefly-7f4fd5765-s5q6l         0/1    Pending            0         1s
+	firefly-redis-75c96dc865-s6sq5  0/1    ContainerCreating  0         1s
+
+	==> v1/Secret
+	NAME            TYPE    DATA  AGE
+	firefly-secret  Opaque  1     1s
+
+	==> v1/Service
+	NAME           TYPE       CLUSTER-IP     EXTERNAL-IP  PORT(S)   AGE
+	firefly-redis  ClusterIP  10.96.160.166  <none>       6379/TCP  1s
+	firefly        ClusterIP  10.104.48.146  <none>       8080/TCP  1s
+
+
+    ## Install Nublado
+    sudo helm install lsstsqre/nublado --name nublado --namespace nublado --values nublado-values.yaml
+
+	NAME:   nublado
+	LAST DEPLOYED: Tue Feb 11 20:25:11 2020
+	NAMESPACE: nublado
+	STATUS: DEPLOYED
+
+	RESOURCES:
+	==> v1/Pod(related)
+	NAME                             READY  STATUS             RESTARTS  AGE
+	nublado-hub-5c8cbcd864-cxfcz     0/1    Pending            0         1s
+	nublado-proxy-7b85bf54bc-fmdv5   0/1    ContainerCreating  0         1s
+	nublado-wf-api-5844f88788-9mw8r  0/1    ContainerCreating  0         1s
+
+	==> v1/ConfigMap
+	NAME                       DATA  AGE
+	nublado-fs-mounts          1     2s
+	nublado-jupyterhub-config  1     1s
+	nublado-jwt-cert           1     1s
+	nublado-resourcemap        1     1s
+
+	==> v1/ServiceAccount
+	NAME               SECRETS  AGE
+	nublado-dask       1        1s
+	nublado-hub        1        1s
+	nublado-prepuller  1        1s
+
+	==> v1/ClusterRoleBinding
+	NAME               AGE
+	nublado-hub        1s
+	nublado-prepuller  1s
+
+	==> v1/Role
+	NAME               AGE
+	nublado-dask       1s
+	nublado-hub        1s
+	nublado-prepuller  1s
+
+	==> v1/RoleBinding
+	NAME               AGE
+	nublado-dask       1s
+	nublado-hub        1s
+	nublado-prepuller  1s
+
+	==> v1/Service
+	NAME            TYPE      CLUSTER-IP      EXTERNAL-IP  PORT(S)                        AGE
+	nublado-hub     NodePort  10.103.99.205   <none>       8081:31574/TCP                 1s
+	nublado-proxy   NodePort  10.102.241.203  <none>       8000:31307/TCP,8001:32761/TCP  1s
+	nublado-wf-api  NodePort  10.111.159.84   <none>       8080:30585/TCP                 1s
+
+	==> v1/Secret
+	NAME         TYPE    DATA  AGE
+	nublado-hub  Opaque  10    2s
+
+	==> v1/PersistentVolumeClaim
+	NAME                 STATUS   VOLUME  CAPACITY  ACCESS MODES  STORAGECLASS  AGE
+	nublado-hub-physpvc  Pending  1s
+
+	==> v1/ClusterRole
+	NAME               AGE
+	nublado-hub        1s
+	nublado-prepuller  1s
+
+	==> v1/Deployment
+	NAME            DESIRED  CURRENT  UP-TO-DATE  AVAILABLE  AGE
+	nublado-hub     1        1        1           0          1s
+	nublado-proxy   1        1        1           0          1s
+	nublado-wf-api  1        1        1           0          1s
+
+	==> v1beta1/CronJob
+	NAME               SCHEDULE    SUSPEND  ACTIVE  LAST SCHEDULE  AGE
+	nublado-prepuller  35 * * * *  False    0       <none>         1s
+
+	==> v1beta1/Ingress
+	NAME            HOSTS  ADDRESS  PORTS  AGE
+	nublado-proxy   *      80       1s
+	nublado-wf-api  *      80       1s
+
 
 
 popd
