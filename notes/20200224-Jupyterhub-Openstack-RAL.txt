@@ -1,0 +1,153 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2019, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+###############################################################
+## Installing Jupyterhub (with Helm/Kubernetes) on Openstack ##
+###############################################################
+
+
+
+## Create a 3 node K8s cluster (based on previous notes)
+## lsp-master, lsp-worker, lsp-worker-2
+## --------------------------------------------
+
+
+
+
+ssh lsp-master
+
+
+## Install Helm
+## --------------------------------------------
+
+    curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+    chmod 700 get_helm.sh
+    chmod 700 get_helm.sh
+    ./get_helm.sh
+
+
+    helm version
+      > version.BuildInfo{Version:"v3.1.1", GitCommit:"afe70585407b420d0097d07b21c47dc511525ac8", GitTreeState:"clean", GoVersion:"go1.13.8"}
+
+
+## Create jhub namespace
+## --------------------------------------------
+    kubectl create namespace jhub
+
+
+
+## Update helm and add JHub chart
+## --------------------------------------------   
+    helm repo add jupyterhub https://jupyterhub.github.io/helm-chart/
+    sudo helm repo update
+    export RELEASE=jhub
+    export NAMESPACE=jhub
+
+
+
+## Running instruction based on notes in zero-to-kubernetes not quite working
+## https://zero-to-jupyterhub.readthedocs.io/en/latest/setup-jupyterhub/setup-jupyterhub.html
+## sudo helm upgrade --install $RELEASE jupyterhub/jupyterhub   --namespace $NAMESPACE     --values config.yaml
+
+
+
+## Install jupyterhub from Helm charts
+## --------------------------------------------
+
+    cp ~/.helm/cache/archive/jupyterhub-0.8.2.tgz .
+    tar -xzvf  jupyterhub-0.8.2.tgz
+    helm install jupyterhub jupyterhub/jupyterhub   --namespace $NAMESPACE     --values config.yaml
+
+
+
+	NAME: jupyterhub
+	LAST DEPLOYED: Mon Feb 24 11:08:16 2020
+	NAMESPACE: jhub
+	STATUS: deployed
+	REVISION: 1
+	TEST SUITE: None
+	NOTES:
+	Thank you for installing JupyterHub!
+
+	Your release is named jupyterhub and installed into the namespace jhub.
+
+	You can find if the hub and proxy is ready by doing:
+
+	 kubectl --namespace=jhub get pod
+
+	and watching for both those pods to be in status 'Ready'.
+
+	You can find the public IP of the JupyterHub by doing:
+
+	 kubectl --namespace=jhub get svc proxy-public
+
+	It might take a few minutes for it to appear!
+
+	Note that this is still an alpha release! If you have questions, feel free to
+	  1. Read the guide at https://z2jh.jupyter.org
+	  2. Chat with us at https://gitter.im/jupyterhub/jupyterhub
+	  3. File issues at https://github.com/jupyterhub/zero-to-jupyterhub-k8s/issues
+
+
+
+## Check the install
+## --------------------------------------------
+
+    kubectl --namespace=jhub get pod
+
+	NAME                    READY   STATUS    RESTARTS   AGE
+	hub-5fc6544446-7gmvh    0/1     Pending   0          17m
+	proxy-d9ddfbdd8-j5wdh   1/1     Running   0          17m
+
+
+    kubectl get service --namespace jhub
+	NAME           TYPE           CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
+	hub            ClusterIP      10.107.133.153   <none>        8081/TCP                     18m
+	proxy-api      ClusterIP      10.98.151.210    <none>        8001/TCP                     18m
+	proxy-public   LoadBalancer   10.97.253.243    <pending>     80:30735/TCP,443:30552/TCP   18m
+
+
+    kubectl describe service proxy-public --namespace jhub
+
+	Name:                     proxy-public
+	Namespace:                jhub
+	Labels:                   app=jupyterhub
+		                  chart=jupyterhub-0.8.2
+		                  component=proxy-public
+		                  heritage=Helm
+		                  release=jupyterhub
+	Annotations:              <none>
+	Selector:                 component=proxy,release=jupyterhub
+	Type:                     LoadBalancer
+	IP:                       10.97.253.243
+	Port:                     http  80/TCP
+	TargetPort:               8000/TCP
+	NodePort:                 http  30735/TCP
+	Endpoints:                10.244.1.116:8000
+	Port:                     https  443/TCP
+	TargetPort:               443/TCP
+	NodePort:                 https  30552/TCP
+	Endpoints:                10.244.1.116:443
+	Session Affinity:         None
+	External Traffic Policy:  Cluster
+	Events:                   <none>
+
