@@ -1,0 +1,214 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2019, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+########################################################
+##    LSP (with Rancher/Kubernetes) on Openstack      ##
+########################################################
+
+
+## Setup 1 Admin, 1 Master & 1 Worker onde
+
+
+
+## On Admin
+## Install Docker
+sudo apt-get update
+sudo apt-get install docker.io
+
+
+## Deploy Rancher 
+##---------------------------------------------------------
+
+## Install Rancher. Documentation is at https://rancher.com/docs/rancher/v2.x/en/
+sudo docker run -d --restart=unless-stopped -p 80:80 -p 443:443  rancher/rancher:latest
+
+
+## Create Cluster 
+##---------------------------------------------------------
+
+## Setup a Public IP for Rancher, and configure new cluster in GUI
+## Master node should have all 3 options checked (etcd, worker, ..)
+
+## Use following config for cluster creation:
+
+https://github.com/lsst-uk/jupyterhub/blob/master/rancher/jupyter.yml
+
+## Once created, copy and run join command on each node of cluster
+## For workers only check the "worker" option
+
+
+## Need to set the openstack cloud provider configuration, with an update after the cluster is configured!
+## Update cluster configuration from Rancher, add the opentack cloud configuration with the right credentials
+
+cloud_provider: 
+  name: "openstack"
+  openstackCloudProvider: 
+    block_storage: 
+      bs-version: "auto"
+      ignore-volume-az: true
+      trust-device-path: false
+    global: 
+      auth-url: "https://openstack.stfc.ac.uk:5000/v3"
+      domain-name: "default"
+      password: ""
+      tenant-id: ""
+      username: ""
+    load_balancer: 
+      create-monitor: false
+      manage-security-groups: false
+      monitor-delay: 0
+      monitor-max-retries: 0
+      monitor-timeout: 0
+      use-octavia: false
+    metadata: 
+      request-timeout: 0
+
+
+
+## [Admin Node] Setup kubectl
+##---------------------------------------------------------
+
+## Install kubectl
+
+curl -LO https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl
+sudo chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin/kubectl
+
+## Copy kubectl config from Rancher GUI, into ~/.kube/config
+
+
+
+## [Admin Node]  Create storage Class
+##---------------------------------------------------------
+
+## From the Admin node
+## Create default storage class with cinder:
+
+	kind: StorageClass
+	apiVersion: storage.k8s.io/v1
+	metadata:
+	  name: standard
+	  annotations:
+	    storageclass.kubernetes.io/is-default-class: "true"
+	provisioner: kubernetes.io/cinder
+	parameters:
+	  availability: nova
+
+
+
+kubectl --kubeconfig ~/.kube/config apply -f sc.yml
+
+
+
+
+## [Admin Node]  Deploy Kubernetes Dashboard
+##---------------------------------------------------------
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta6/aio/deploy/recommended.yaml
+
+nano dashboard-adminuser.yaml
+
+	apiVersion: rbac.authorization.k8s.io/v1
+	kind: ClusterRoleBinding
+	metadata:
+	  name: admin-user
+	roleRef:
+	  apiGroup: rbac.authorization.k8s.io
+	  kind: ClusterRole
+	  name: cluster-admin
+	subjects:
+	- kind: ServiceAccount
+	  name: admin-user
+	  namespace: kubernetes-dashboard
+
+
+
+kubectl apply -f dashboard-adminuser.yaml
+kubectl -n kube-system describe secret
+
+## Copy tiller account secret and use as token for the GUI
+
+
+
+
+##---------------------------------------------------------
+## [Local Machine] Kubernetes Dashboard Web GUI 
+##---------------------------------------------------------
+
+curl https://${RANCHER_IP}/k8s/clusters/${CLUSTER_ID}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login
+
+
+
+
+
+## [Admin Node]  Fetch LSP create scripts
+##---------------------------------------------------------
+
+git clone https://github.com/lsst-sqre/lsp-deploy
+
+
+
+## [Admin Node] Set nublado configuration variables (OAuth)
+##---------------------------------------------------------
+
+pushd lsp-deploy/develop-gke/
+    nano nublado-values.yaml
+        ..
+        fqdn: '192.41.108.30'
+        oauth_client_id: '${github_client_id}'
+	oauth_secret: '${github_secret}'
+        ..
+
+
+   ## Create Certificates 
+  sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/apache-selfsigned.key -out /etc/ssl/certs/apache-selfsigned.crt
+  sudo scp -r /etc/ssl/private/ . 
+  sudo scp -r /etc/ssl/certs/apache-selfsigned.crt private/ 
+  sudo chown ubuntu:root private/
+
+
+  ## Do we need these?
+  kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+
+
+  helm init --service-account tiller --override spec.selector.matchLabels.'name'='tiller',spec.selector.matchLabels.'app'='helm' --output yaml | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@' | kubectl apply -f -
+
+   ## Install Tiller
+   sudo ./install_tiller.sh
+
+   ## Install ingress
+   sudo ./install_ingress.sh private/apache-selfsigned.crt private/apache-selfsigned.key 
+
+   ## Set Public IP
+   sudo ./public_ip.sh
+
+   ## Set the IP manually in public_ip.sh
+
+   sudo ./install_lsp.sh
+   
+
+## If Installs fail, or we want to manually edit to configs:
+
+   cp .helm/cache/archive/fileserver-0.2.1.tgz .
+
+   echo "Installing Fileserver..."
+   helm install fileserver --name fileserver --namespace fileserver
+
