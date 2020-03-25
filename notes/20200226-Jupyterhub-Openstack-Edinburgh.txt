@@ -178,6 +178,9 @@ pushd lsp-deploy/develop-gke/
         ..
 
 
+## [Admin Node] Install tiller account & Certs
+##---------------------------------------------------------
+
    ## Create Certificates 
   sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/apache-selfsigned.key -out /etc/ssl/certs/apache-selfsigned.crt
   sudo scp -r /etc/ssl/private/ . 
@@ -185,11 +188,14 @@ pushd lsp-deploy/develop-gke/
   sudo chown ubuntu:root private/
 
 
-  ## Do we need these?
+  ## Had to run the following from previous notes when installing k8s, but we probably dont need need these?
   kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
-
-
   helm init --service-account tiller --override spec.selector.matchLabels.'name'='tiller',spec.selector.matchLabels.'app'='helm' --output yaml | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@' | kubectl apply -f -
+
+
+
+## [Admin Node] Install LSP Helm charts
+##---------------------------------------------------------
 
    ## Install Tiller
    sudo ./install_tiller.sh
@@ -205,10 +211,81 @@ pushd lsp-deploy/develop-gke/
    sudo ./install_lsp.sh
    
 
-## If Installs fail, or we want to manually edit to configs:
+   ## Installs failed, so lets edit the configuration and redeploy
+   ## Firefly and CADC TAP Service worked fine, issues with the Fileserver & Nublado
+  
+   ## [IMPORTANT] We need to replace all instances of the "fast" storage class, with "standard" which we created in the previous step
+
+   
 
    cp .helm/cache/archive/fileserver-0.2.1.tgz .
+   cp .helm/cache/archive/nublado-0.7.3.tgz .
+
+   ## Remove any instances where fast is created, and replace with standard
+  
+
+   ## Change to a different nfs server image
+   ## the Sciplat fileserver seems to be failing
+   nano ~/fileserver/values.yaml
+
+   .. 
+	image:
+	  repository: 'mnagy/nfs-server'
+	  tag: 'latest'
+
+   ..
+
 
    echo "Installing Fileserver..."
    helm install fileserver --name fileserver --namespace fileserver
+
+   ## Fileserver works now!
+
+
+
+   ## Nublado still failing with NFS server errors
+   ## Change nublado configuration
+
+
+
+   nano ~/nublado/values.yaml
+
+   ## Set the Fileserver-host values
+   ..
+
+	   mountpoints: |
+	  [
+	    {
+	      "mountpoint": "/home",
+	      "mode": "rw",
+	      "fileserver-export": "/home",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/datasets",
+	      "fileserver-export": "/datasets",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/software",
+	      "fileserver-export": "/software",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/project",
+	      "mode": "rw",
+	      "fileserver-export": "/project",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/scratch",
+	      "mode": "rw",
+	      "fileserver-export": "/scratch",
+	      "fileserver-host": "10.43.213.26"
+	    }
+	  ]
+
+    ..
+
+
 
