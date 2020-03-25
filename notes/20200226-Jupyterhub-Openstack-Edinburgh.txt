@@ -288,4 +288,171 @@ pushd lsp-deploy/develop-gke/
     ..
 
 
+  
+  lab:   
+    image_name: 'lsstsqre/sciplat-lab:latest'
+   ..
+
+
+
+   ## I get to the image selection screen after authenticating
+ 
+   ## After selecting the "latest" image and "tiny"
+
+	[I 2020-03-25 18:03:52.775 JupyterHub reflector:199] watching for pods with label selector='component=singleuser-server' in namespace nublado-stvoutsin
+	[E 2020-03-25 18:03:52.775 JupyterHub gen:599] Exception in Future <Future finished exception=TimeoutError('pod/nb-stvoutsin-latest did not start in 900 seconds!',)> after timeout
+	    Traceback (most recent call last):
+	      File "/usr/local/lib64/python3.6/site-packages/tornado/gen.py", line 593, in error_callback
+		future.result()
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhubutils/spawner/multispawner.py", line 162, in _start
+		timeout=self.start_timeout,
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/utils.py", line 177, in exponential_backoff
+		raise TimeoutError(fail_message)
+	    TimeoutError: pod/nb-stvoutsin-latest did not start in 900 seconds!
+
+
+   ## After selecting the "Recommended" image and "small"
+    
+
+	[D 2020-03-25 18:17:54.362 spawner:progress:1601] progress generator: nb-stvoutsin-w-2020-10
+	DEBUG:jupyterhubutils.utils.utils:progress generator: nb-stvoutsin-w-2020-10
+	[E 2020-03-25 18:17:54.363 JupyterHub web:1788] Uncaught exception GET /nb/hub/api/users/stvoutsin/server/progress (..)
+	    HTTPServerRequest(protocol='http', host='192.41.108.30', method='GET', uri='/nb/hub/api/users/stvoutsin/server/progress', version='HTTP/1.1', remote_ip='..')
+	    Traceback (most recent call last):
+	      File "/usr/local/lib64/python3.6/site-packages/tornado/web.py", line 1699, in _execute
+		result = await result
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/apihandlers/users.py", line 593, in get
+		async for event in events:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 199, in __next__
+		return self._invoke(self._it.__next__)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/utils.py", line 555, in iterate_until
+		await yield_(item_future.result())
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/spawner.py", line 1005, in _generate_progress
+		async for event in progress:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1613, in progress
+		events = self.events
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1574, in events
+		for event in self.event_reflector.events:
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhubutils/spawner/multireflector.py", line 182, in events
+		key=lambda x: x.last_timestamp if x.last_timestamp is not None else
+	    TypeError: can't compare offset-naive and offset-aware datetimes
+	    
+
+
+
+    ## Try changing lab image back to ''
+	..
+	  lab:   
+	    image_name: 'lsstsqre/sciplat-lab:latest'
+	..
+
+
+    ## Redeploying..
+
+    ## try "Tiny" image with "Recommended Weekly 2020_10" image
+
+	[E 2020-03-25 18:38:16.808 JupyterHub web:1194] Cannot send error response after headers written
+	[I 2020-03-25 18:38:16.809 JupyterHub log:174] 200 GET /nb/hub/api/users/stvoutsin/server/progress (stvoutsin@..) 14.89ms
+	[D 2020-03-25 18:38:19.936 spawner:progress:1601] progress generator: nb-stvoutsin-w-2020-10
+	[D 2020-03-25 18:38:19.936 spawner:progress:1601] progress generator: nb-stvoutsin-w-2020-10
+	DEBUG:jupyterhubutils.utils.utils:progress generator: nb-stvoutsin-w-2020-10
+	[E 2020-03-25 18:38:19.937 JupyterHub web:1788] Uncaught exception GET /nb/hub/api/users/stvoutsin/server/progress (..)
+	    HTTPServerRequest(protocol='http', host='192.41.108.30', method='GET', uri='/nb/hub/api/users/stvoutsin/server/progress', version='HTTP/1.1', remote_ip='..')
+	    Traceback (most recent call last):
+	      File "/usr/local/lib64/python3.6/site-packages/tornado/web.py", line 1699, in _execute
+		result = await result
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/apihandlers/users.py", line 593, in get
+		async for event in events:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 199, in __next__
+		return self._invoke(self._it.__next__)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/utils.py", line 555, in iterate_until
+		await yield_(item_future.result())
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/spawner.py", line 1005, in _generate_progress
+		async for event in progress:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1613, in progress
+		events = self.events
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1574, in events
+		for event in self.event_reflector.events:
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhubutils/spawner/multireflector.py", line 182, in events
+		key=lambda x: x.last_timestamp if x.last_timestamp is not None else
+	    TypeError: can't compare offset-naive and offset-aware datetimes
+	    
+
+
+    ## try "Tiny" image with "Recommended Weekly 2019-50" image
+
+
+	DEBUG:jupyterhubutils.utils.utils:progress generator: nb-stvoutsin-w-2019-50
+	[E 2020-03-25 18:55:19.785 JupyterHub web:1788] Uncaught exception GET /nb/hub/api/users/stvoutsin/server/progress (..)
+	    HTTPServerRequest(protocol='http', host='192.41.108.30', method='GET', uri='/nb/hub/api/users/stvoutsin/server/progress', version='HTTP/1.1', remote_ip='..')
+	    Traceback (most recent call last):
+	      File "/usr/local/lib64/python3.6/site-packages/tornado/web.py", line 1699, in _execute
+		result = await result
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/apihandlers/users.py", line 593, in get
+		async for event in events:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 199, in __next__
+		return self._invoke(self._it.__next__)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/utils.py", line 555, in iterate_until
+		await yield_(item_future.result())
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/spawner.py", line 1005, in _generate_progress
+		async for event in progress:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1613, in progress
+		events = self.events
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1574, in events
+		for event in self.event_reflector.events:
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhubutils/spawner/multireflector.py", line 182, in events
+		key=lambda x: x.last_timestamp if x.last_timestamp is not None else
+	    TypeError: can't compare offset-naive and offset-aware datetimes
+	    
+	[E 2020-03-25 18:55:19.786 JupyterHub web:1194] Cannot send error response after headers written
+	[I 2020-03-25 18:55:19.786 JupyterHub log:174] 200 GET /nb/hub/api/users/stvoutsin/server/progress (stvoutsin@..) 178.66ms
+
 
