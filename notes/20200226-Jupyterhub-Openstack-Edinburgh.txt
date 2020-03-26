@@ -456,3 +456,36 @@ pushd lsp-deploy/develop-gke/
 	[I 2020-03-25 18:55:19.786 JupyterHub log:174] 200 GET /nb/hub/api/users/stvoutsin/server/progress (stvoutsin@..) 178.66ms
 
 
+   ## This was fixed with image 1.18.8
+   ## Try changing nublado/values.yaml hub image value to:
+
+    ..
+	hub:
+	  uid: 768
+	  gid: 768
+	  #proxy_auth_token: ''
+	  #crypto_key: ''
+	  image: 'lsstsqre/sciplat-hub:0.18.8'
+	  persistent_home: True
+    ..
+
+
+   ## Deploying the "Recommended" Image now takes us to a Lab interface
+
+   ## Creating a notebook is ok, but we cant run any cells, kernel gets stuck in a "Reconnecting" phase
+
+   ## Fix: Add Websocket entry to apache proxy
+
+	In Apache proxy config: 
+	 /etc/apache2/sites-enabled/000-default.conf 
+	..
+		RewriteEngine On
+		RewriteCond %{HTTP:Upgrade} =websocket [NC]
+		RewriteRule ^/nb\/(.*)           ws://192.168.0.5:30656/nb/$1 [P,L]
+		RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+	..   
+
+
+   ## This works, and we can now create and run notebooks :)
+
+   ## TODO: Recreate notes with more details + without debugging comments

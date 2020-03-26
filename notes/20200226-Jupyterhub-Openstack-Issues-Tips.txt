@@ -116,3 +116,63 @@ kubectl patch deploy -n jhub hub --type json --patch '[{"op": "replace", "path":
 
 
 
+
+## Issue 
+## -------------------------------------------
+
+LSP Fileserver not working
+
+Fix: use different Docker image and test with that
+
+
+
+nano fileserver/values.yaml
+..
+
+image:
+  repository: 'mnagy/nfs-server'
+  tag: 'latest'
+..
+
+
+
+MountVolume.SetUp failed for volume "home" : mount failed: exit status 32 Mounting command: mount Mounting arguments: -t nfs 10.43.213.26:/home /var/lib/kubelet/pods/bab668ff-47a1-4ae0-96cb-7ff7dc305956/volumes/kubernetes.io~nfs/home Output: mount.nfs: access denied by server while mounting 10.43.213.26:/home
+
+
+
+
+## Issue 
+## -------------------------------------------
+
+Error when spawning user image:
+
+500 : Internal Server Error
+Redirect loop detected.
+
+Error appears in browser..
+
+
+Fix: Don't point the proxy to hub pod, instead point it to the proxy service
+
+
+
+
+
+## Issue 
+## -------------------------------------------
+
+Error when spawning user image:
+  Kernel stuck at reconnecting.
+
+Checking firebug shows connection errors to websocket requests
+
+Fix: Add Websocket entry to apache proxy
+
+In Apache proxy config: 
+ /etc/apache2/sites-enabled/000-default.conf 
+..
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} =websocket [NC]
+        RewriteRule ^/nb\/(.*)           ws://192.168.0.5:30656/nb/$1 [P,L]
+        RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+..
