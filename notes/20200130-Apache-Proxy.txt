@@ -104,15 +104,49 @@ sudo nano /etc/apache2/sites-available/000-default.conf
         Timeout 6000
         ProxyReceiveBufferSize 2048
 
+
         ## PROXY ENTRIES HERE ##
-        ProxyPassMatch    ^/nublado\/(.*)$  http://192.168.0.9:32229/suit/$1
-        ProxyPassReverse  ^/nublado\/(.*)$  http://192.168.0.9:32229/suit/$1
+        ProxyPassMatch    ^/firefly\/(.*)$  http://192.168.0.16:30249/suit/$1
+        ProxyPassReverse  ^/firefly\/(.*)$  http://192.168.0.16:30249/suit/$1
+
+        ProxyPassMatch    ^/firefly  http://192.168.0.16:30249/suit
+        ProxyPassReverse  ^/firefly  http://192.168.0.16:30249/suit
+
+
+        ProxyPassMatch    ^/portal\/app/\/(.*)$  http://192.168.0.16:30249/suit/$1
+        ProxyPassReverse  ^/portal/\app/\/(.*)$  http://192.168.0.16:30249/suit/$1
+
+        ProxyPassMatch    ^/js9\/(.*)$  http://192.168.0.16:31770/$1
+        ProxyPassReverse  ^/js9\/(.*)$  http://192.168.0.16:31770/$1
+
+        ProxyPassMatch    ^/wf\/(.*)$  http://192.168.0.5:30533/$1
+        ProxyPassReverse  ^/wf\/(.*)$  http://192.168.0.5:30533/$1
+
+
+        ProxyPassMatch    ^/nublado\/(.*)$  http://192.168.0.10:30071/$1
+        ProxyPassReverse  ^/nublado\/(.*)$  http://192.168.0.10:30071/$1
+
+        ProxyPassMatch    ^/nb\/(.*)$  http://192.168.0.10:30071/nb/$1
+        ProxyPassReverse  ^/nb\/(.*)$  http://192.168.0.10:30071/nb/$1
+
+        #ProxyPassMatch    ^/(.*)$  http://192.168.0.10:30254/$1
+        #ProxyPassReverse  ^/(.*)$  http://192.168.0.10:30254/$1
+
+
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} =websocket [NC]     
+        RewriteRule ^/firefly\/(.*)           ws://192.168.0.10:30249/$1 [P,L]
+        RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+        RewriteRule ^/firefly\/(.*)           http://192.168.0.10:30249/$1 [P,L]
+
 
         RewriteEngine On
         RewriteCond %{HTTP:Upgrade} =websocket [NC]
-        RewriteRule ^/nublado\/(.*)           ws://192.168.0.9:32229/suit/$1 [P,L]
+        RewriteRule ^/nb\/(.*)           ws://192.168.0.5:30656/nb/$1 [P,L]
         RewriteCond %{HTTP:Upgrade} !=websocket [NC]
-        RewriteRule ^/nublado\/(.*)           http://192.168.0.9:32229/suit/$1 [P,L]
+        #RewriteRule ^/nb\/(.*)           http://192.168.0.5:30656/nb/$1 [P,L]
+
+
 
 
 

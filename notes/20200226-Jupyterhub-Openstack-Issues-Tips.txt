@@ -1,0 +1,178 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2019, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+########################################################
+##    LSP (with Rancher/Kubernetes) on Openstack      ##
+########################################################
+
+## Issue 
+## -------------------------------------------
+
+" pod has unbound immediate PersistentVolumeClaims "
+
+
+## Fix
+
+1) Update cluster configuration from Rancher, add the opentack cloud configuration with the right credentials
+
+cloud_provider: 
+  name: "openstack"
+  openstackCloudProvider: 
+    block_storage: 
+      bs-version: "auto"
+      ignore-volume-az: true
+      trust-device-path: false
+    global: 
+      auth-url: "https://openstack.stfc.ac.uk:5000/v3"
+      domain-name: "default"
+      password: ""
+      tenant-id: ""
+      username: ""
+    load_balancer: 
+      create-monitor: false
+      manage-security-groups: false
+      monitor-delay: 0
+      monitor-max-retries: 0
+      monitor-timeout: 0
+      use-octavia: false
+    metadata: 
+      request-timeout: 0
+
+
+2) Create default storage class with cinder:
+
+	kind: StorageClass
+	apiVersion: storage.k8s.io/v1
+	metadata:
+	  name: standard
+	  annotations:
+	    storageclass.kubernetes.io/is-default-class: "true"
+	provisioner: kubernetes.io/cinder
+	parameters:
+	  availability: nova
+
+## Note, Adding the cloud_provider parameter in the yaml file when first creating the cluster, did not apply it
+## Checking the yaml file after creation, showed empty value for cloud_provider {}
+
+
+
+
+## Issue 
+## -------------------------------------------
+
+Python error after logging into JHub
+https://github.com/jupyterhub/kubespawner/issues/354
+
+HTTPServerRequest(protocol='http', host='conda.corp-apps.com', method='GET', uri='/hub/user/apoliakevitch/', version='HTTP/1.1', remote_ip='10.244.4.1')
+    Traceback (most recent call last):
+      File "/usr/local/lib/python3.6/dist-packages/tornado/web.py", line 1699, in _execute
+        result = await result
+      File "/usr/local/lib/python3.6/dist-packages/jupyterhub/handlers/base.py", line 1013, in get
+        raise copy.copy(exc).with_traceback(exc.__traceback__)
+      File "/usr/local/lib/python3.6/dist-packages/tornado/gen.py", line 589, in error_callback
+        future.result()
+      File "/usr/local/lib/python3.6/dist-packages/jupyterhub/handlers/base.py", line 636, in finish_user_spawn
+        await spawn_future
+      File "/usr/local/lib/python3.6/dist-packages/jupyterhub/user.py", line 489, in spawn
+        raise e
+      File "/usr/local/lib/python3.6/dist-packages/jupyterhub/user.py", line 409, in spawn
+        url = await gen.with_timeout(timedelta(seconds=spawner.start_timeout), f)
+      File "/usr/local/lib/python3.6/dist-packages/kubespawner/spawner.py", line 1636, in _start
+        events = self.events
+      File "/usr/local/lib/python3.6/dist-packages/kubespawner/spawner.py", line 1491, in events
+        for event in self.event_reflector.events:
+      File "/usr/local/lib/python3.6/dist-packages/kubespawner/spawner.py", line 72, in events
+        key=lambda x: x.last_timestamp,
+    TypeError: '<' not supported between instances of 'datetime.datetime' and 'NoneType'
+
+
+## Fix:
+
+After Deploying JHub, apply patch
+
+
+kubectl patch deploy -n jhub hub --type json --patch '[{"op": "replace", "path": "/spec/template/spec/containers/0/command", "value": ["bash", "-c", "\nmkdir -p ~/hotfix\ncp -r /usr/local/lib/python3.6/dist-packages/kubespawner ~/hotfix\nls -R ~/hotfix\npatch ~/hotfix/kubespawner/spawner.py << EOT\n72c72\n<             key=lambda x: x.last_timestamp,\n---\n>             key=lambda x: x.last_timestamp and x.last_timestamp.timestamp() or 0.,\nEOT\n\nPYTHONPATH=$HOME/hotfix jupyterhub --config /srv/jupyterhub_config.py --upgrade-db\n"]}]'
+
+
+
+
+
+
+## Issue 
+## -------------------------------------------
+
+LSP Fileserver not working
+
+Fix: use different Docker image and test with that
+
+
+
+nano fileserver/values.yaml
+..
+
+image:
+  repository: 'mnagy/nfs-server'
+  tag: 'latest'
+..
+
+
+
+MountVolume.SetUp failed for volume "home" : mount failed: exit status 32 Mounting command: mount Mounting arguments: -t nfs 10.43.213.26:/home /var/lib/kubelet/pods/bab668ff-47a1-4ae0-96cb-7ff7dc305956/volumes/kubernetes.io~nfs/home Output: mount.nfs: access denied by server while mounting 10.43.213.26:/home
+
+
+
+
+## Issue 
+## -------------------------------------------
+
+Error when spawning user image:
+
+500 : Internal Server Error
+Redirect loop detected.
+
+Error appears in browser..
+
+
+Fix: Don't point the proxy to hub pod, instead point it to the proxy service
+
+
+
+
+
+## Issue 
+## -------------------------------------------
+
+Error when spawning user image:
+  Kernel stuck at reconnecting.
+
+Checking firebug shows connection errors to websocket requests
+
+Fix: Add Websocket entry to apache proxy
+
+In Apache proxy config: 
+ /etc/apache2/sites-enabled/000-default.conf 
+..
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} =websocket [NC]
+        RewriteRule ^/nb\/(.*)           ws://192.168.0.5:30656/nb/$1 [P,L]
+        RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+..

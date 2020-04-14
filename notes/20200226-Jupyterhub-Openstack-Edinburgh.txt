@@ -1,0 +1,491 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2019, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+########################################################
+##    LSP (with Rancher/Kubernetes) on Openstack      ##
+########################################################
+
+
+## Setup 1 Admin, 1 Master & 1 Worker onde
+
+
+
+## On Admin
+## Install Docker
+sudo apt-get update
+sudo apt-get install docker.io
+
+
+## Deploy Rancher 
+##---------------------------------------------------------
+
+## Install Rancher. Documentation is at https://rancher.com/docs/rancher/v2.x/en/
+sudo docker run -d --restart=unless-stopped -p 80:80 -p 443:443  rancher/rancher:latest
+
+
+## Create Cluster 
+##---------------------------------------------------------
+
+## Setup a Public IP for Rancher, and configure new cluster in GUI
+## Master node should have all 3 options checked (etcd, worker, ..)
+
+## Use following config for cluster creation:
+
+https://github.com/lsst-uk/jupyterhub/blob/master/rancher/jupyter.yml
+
+## Once created, copy and run join command on each node of cluster
+## For workers only check the "worker" option
+
+
+## Need to set the openstack cloud provider configuration, with an update after the cluster is configured!
+## Update cluster configuration from Rancher, add the opentack cloud configuration with the right credentials
+
+cloud_provider: 
+  name: "openstack"
+  openstackCloudProvider: 
+    block_storage: 
+      bs-version: "auto"
+      ignore-volume-az: true
+      trust-device-path: false
+    global: 
+      auth-url: "https://openstack.stfc.ac.uk:5000/v3"
+      domain-name: "default"
+      password: ""
+      tenant-id: ""
+      username: ""
+    load_balancer: 
+      create-monitor: false
+      manage-security-groups: false
+      monitor-delay: 0
+      monitor-max-retries: 0
+      monitor-timeout: 0
+      use-octavia: false
+    metadata: 
+      request-timeout: 0
+
+
+
+## [Admin Node] Setup kubectl
+##---------------------------------------------------------
+
+## Install kubectl
+
+curl -LO https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl
+sudo chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin/kubectl
+
+## Copy kubectl config from Rancher GUI, into ~/.kube/config
+
+
+
+## [Admin Node]  Create storage Class
+##---------------------------------------------------------
+
+## From the Admin node
+## Create default storage class with cinder:
+
+	kind: StorageClass
+	apiVersion: storage.k8s.io/v1
+	metadata:
+	  name: standard
+	  annotations:
+	    storageclass.kubernetes.io/is-default-class: "true"
+	provisioner: kubernetes.io/cinder
+	parameters:
+	  availability: nova
+
+
+
+kubectl --kubeconfig ~/.kube/config apply -f sc.yml
+
+
+
+
+## [Admin Node]  Deploy Kubernetes Dashboard
+##---------------------------------------------------------
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta6/aio/deploy/recommended.yaml
+
+nano dashboard-adminuser.yaml
+
+	apiVersion: rbac.authorization.k8s.io/v1
+	kind: ClusterRoleBinding
+	metadata:
+	  name: admin-user
+	roleRef:
+	  apiGroup: rbac.authorization.k8s.io
+	  kind: ClusterRole
+	  name: cluster-admin
+	subjects:
+	- kind: ServiceAccount
+	  name: admin-user
+	  namespace: kubernetes-dashboard
+
+
+
+kubectl apply -f dashboard-adminuser.yaml
+kubectl -n kube-system describe secret
+
+## Copy tiller account secret and use as token for the GUI
+
+
+
+
+##---------------------------------------------------------
+## [Local Machine] Kubernetes Dashboard Web GUI 
+##---------------------------------------------------------
+
+curl https://${RANCHER_IP}/k8s/clusters/${CLUSTER_ID}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login
+
+
+
+
+
+## [Admin Node]  Fetch LSP create scripts
+##---------------------------------------------------------
+
+git clone https://github.com/lsst-sqre/lsp-deploy
+
+
+
+## [Admin Node] Set nublado configuration variables (OAuth)
+##---------------------------------------------------------
+
+pushd lsp-deploy/develop-gke/
+    nano nublado-values.yaml
+        ..
+        fqdn: '192.41.108.30'
+        oauth_client_id: '${github_client_id}'
+	oauth_secret: '${github_secret}'
+        ..
+
+
+## [Admin Node] Install tiller account & Certs
+##---------------------------------------------------------
+
+   ## Create Certificates 
+  sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/apache-selfsigned.key -out /etc/ssl/certs/apache-selfsigned.crt
+  sudo scp -r /etc/ssl/private/ . 
+  sudo scp -r /etc/ssl/certs/apache-selfsigned.crt private/ 
+  sudo chown ubuntu:root private/
+
+
+  ## Had to run the following from previous notes when installing k8s, but we probably dont need need these?
+  kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+  helm init --service-account tiller --override spec.selector.matchLabels.'name'='tiller',spec.selector.matchLabels.'app'='helm' --output yaml | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@' | kubectl apply -f -
+
+
+
+## [Admin Node] Install LSP Helm charts
+##---------------------------------------------------------
+
+   ## Install Tiller
+   sudo ./install_tiller.sh
+
+   ## Install ingress
+   sudo ./install_ingress.sh private/apache-selfsigned.crt private/apache-selfsigned.key 
+
+   ## Set Public IP
+   sudo ./public_ip.sh
+
+   ## Set the IP manually in public_ip.sh
+
+   sudo ./install_lsp.sh
+   
+
+   ## Installs failed, so lets edit the configuration and redeploy
+   ## Firefly and CADC TAP Service worked fine, issues with the Fileserver & Nublado
+  
+   ## [IMPORTANT] We need to replace all instances of the "fast" storage class, with "standard" which we created in the previous step
+
+   
+
+   cp .helm/cache/archive/fileserver-0.2.1.tgz .
+   cp .helm/cache/archive/nublado-0.7.3.tgz .
+
+   ## Remove any instances where fast is created, and replace with standard
+  
+
+   ## Change to a different nfs server image
+   ## the Sciplat fileserver seems to be failing
+   nano ~/fileserver/values.yaml
+
+   .. 
+	image:
+	  repository: 'mnagy/nfs-server'
+	  tag: 'latest'
+
+   ..
+
+
+   echo "Installing Fileserver..."
+   helm install fileserver --name fileserver --namespace fileserver
+
+   ## Fileserver works now!
+
+
+
+   ## Nublado still failing with NFS server errors
+   ## Change nublado configuration
+
+
+
+   nano ~/nublado/values.yaml
+
+   ## Set the Fileserver-host values
+   ..
+
+	   mountpoints: |
+	  [
+	    {
+	      "mountpoint": "/home",
+	      "mode": "rw",
+	      "fileserver-export": "/home",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/datasets",
+	      "fileserver-export": "/datasets",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/software",
+	      "fileserver-export": "/software",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/project",
+	      "mode": "rw",
+	      "fileserver-export": "/project",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/scratch",
+	      "mode": "rw",
+	      "fileserver-export": "/scratch",
+	      "fileserver-host": "10.43.213.26"
+	    }
+	  ]
+
+    ..
+
+
+  
+  lab:   
+    image_name: 'lsstsqre/sciplat-lab:latest'
+   ..
+
+
+
+   ## I get to the image selection screen after authenticating
+ 
+   ## After selecting the "latest" image and "tiny"
+
+	[I 2020-03-25 18:03:52.775 JupyterHub reflector:199] watching for pods with label selector='component=singleuser-server' in namespace nublado-stvoutsin
+	[E 2020-03-25 18:03:52.775 JupyterHub gen:599] Exception in Future <Future finished exception=TimeoutError('pod/nb-stvoutsin-latest did not start in 900 seconds!',)> after timeout
+	    Traceback (most recent call last):
+	      File "/usr/local/lib64/python3.6/site-packages/tornado/gen.py", line 593, in error_callback
+		future.result()
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhubutils/spawner/multispawner.py", line 162, in _start
+		timeout=self.start_timeout,
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/utils.py", line 177, in exponential_backoff
+		raise TimeoutError(fail_message)
+	    TimeoutError: pod/nb-stvoutsin-latest did not start in 900 seconds!
+
+
+   ## After selecting the "Recommended" image and "small"
+    
+
+	[D 2020-03-25 18:17:54.362 spawner:progress:1601] progress generator: nb-stvoutsin-w-2020-10
+	DEBUG:jupyterhubutils.utils.utils:progress generator: nb-stvoutsin-w-2020-10
+	[E 2020-03-25 18:17:54.363 JupyterHub web:1788] Uncaught exception GET /nb/hub/api/users/stvoutsin/server/progress (..)
+	    HTTPServerRequest(protocol='http', host='192.41.108.30', method='GET', uri='/nb/hub/api/users/stvoutsin/server/progress', version='HTTP/1.1', remote_ip='..')
+	    Traceback (most recent call last):
+	      File "/usr/local/lib64/python3.6/site-packages/tornado/web.py", line 1699, in _execute
+		result = await result
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/apihandlers/users.py", line 593, in get
+		async for event in events:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 199, in __next__
+		return self._invoke(self._it.__next__)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/utils.py", line 555, in iterate_until
+		await yield_(item_future.result())
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/spawner.py", line 1005, in _generate_progress
+		async for event in progress:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1613, in progress
+		events = self.events
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1574, in events
+		for event in self.event_reflector.events:
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhubutils/spawner/multireflector.py", line 182, in events
+		key=lambda x: x.last_timestamp if x.last_timestamp is not None else
+	    TypeError: can't compare offset-naive and offset-aware datetimes
+	    
+
+
+
+    ## Try changing lab image back to ''
+	..
+	  lab:   
+	    image_name: 'lsstsqre/sciplat-lab:latest'
+	..
+
+
+    ## Redeploying..
+
+    ## try "Tiny" image with "Recommended Weekly 2020_10" image
+
+	[E 2020-03-25 18:38:16.808 JupyterHub web:1194] Cannot send error response after headers written
+	[I 2020-03-25 18:38:16.809 JupyterHub log:174] 200 GET /nb/hub/api/users/stvoutsin/server/progress (stvoutsin@..) 14.89ms
+	[D 2020-03-25 18:38:19.936 spawner:progress:1601] progress generator: nb-stvoutsin-w-2020-10
+	[D 2020-03-25 18:38:19.936 spawner:progress:1601] progress generator: nb-stvoutsin-w-2020-10
+	DEBUG:jupyterhubutils.utils.utils:progress generator: nb-stvoutsin-w-2020-10
+	[E 2020-03-25 18:38:19.937 JupyterHub web:1788] Uncaught exception GET /nb/hub/api/users/stvoutsin/server/progress (..)
+	    HTTPServerRequest(protocol='http', host='192.41.108.30', method='GET', uri='/nb/hub/api/users/stvoutsin/server/progress', version='HTTP/1.1', remote_ip='..')
+	    Traceback (most recent call last):
+	      File "/usr/local/lib64/python3.6/site-packages/tornado/web.py", line 1699, in _execute
+		result = await result
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/apihandlers/users.py", line 593, in get
+		async for event in events:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 199, in __next__
+		return self._invoke(self._it.__next__)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/utils.py", line 555, in iterate_until
+		await yield_(item_future.result())
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/spawner.py", line 1005, in _generate_progress
+		async for event in progress:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1613, in progress
+		events = self.events
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1574, in events
+		for event in self.event_reflector.events:
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhubutils/spawner/multireflector.py", line 182, in events
+		key=lambda x: x.last_timestamp if x.last_timestamp is not None else
+	    TypeError: can't compare offset-naive and offset-aware datetimes
+	    
+
+
+    ## try "Tiny" image with "Recommended Weekly 2019-50" image
+
+
+	DEBUG:jupyterhubutils.utils.utils:progress generator: nb-stvoutsin-w-2019-50
+	[E 2020-03-25 18:55:19.785 JupyterHub web:1788] Uncaught exception GET /nb/hub/api/users/stvoutsin/server/progress (..)
+	    HTTPServerRequest(protocol='http', host='192.41.108.30', method='GET', uri='/nb/hub/api/users/stvoutsin/server/progress', version='HTTP/1.1', remote_ip='..')
+	    Traceback (most recent call last):
+	      File "/usr/local/lib64/python3.6/site-packages/tornado/web.py", line 1699, in _execute
+		result = await result
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/apihandlers/users.py", line 593, in get
+		async for event in events:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 199, in __next__
+		return self._invoke(self._it.__next__)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/utils.py", line 555, in iterate_until
+		await yield_(item_future.result())
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhub/spawner.py", line 1005, in _generate_progress
+		async for event in progress:
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 366, in step
+		return await ANextIter(self._it, start_fn, *args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 197, in __next__
+		return self._invoke(first_fn, *first_args)
+	      File "/usr/local/lib/python3.6/site-packages/async_generator/_impl.py", line 209, in _invoke
+		result = fn(*args)
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1613, in progress
+		events = self.events
+	      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1574, in events
+		for event in self.event_reflector.events:
+	      File "/usr/local/lib/python3.6/site-packages/jupyterhubutils/spawner/multireflector.py", line 182, in events
+		key=lambda x: x.last_timestamp if x.last_timestamp is not None else
+	    TypeError: can't compare offset-naive and offset-aware datetimes
+	    
+	[E 2020-03-25 18:55:19.786 JupyterHub web:1194] Cannot send error response after headers written
+	[I 2020-03-25 18:55:19.786 JupyterHub log:174] 200 GET /nb/hub/api/users/stvoutsin/server/progress (stvoutsin@..) 178.66ms
+
+
+   ## This was fixed with image 1.18.8
+   ## Try changing nublado/values.yaml hub image value to:
+
+    ..
+	hub:
+	  uid: 768
+	  gid: 768
+	  #proxy_auth_token: ''
+	  #crypto_key: ''
+	  image: 'lsstsqre/sciplat-hub:0.18.8'
+	  persistent_home: True
+    ..
+
+
+   ## Deploying the "Recommended" Image now takes us to a Lab interface
+
+   ## Creating a notebook is ok, but we cant run any cells, kernel gets stuck in a "Reconnecting" phase
+
+   ## Fix: Add Websocket entry to apache proxy
+
+	In Apache proxy config: 
+	 /etc/apache2/sites-enabled/000-default.conf 
+	..
+		RewriteEngine On
+		RewriteCond %{HTTP:Upgrade} =websocket [NC]
+		RewriteRule ^/nb\/(.*)           ws://192.168.0.5:30656/nb/$1 [P,L]
+		RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+	..   
+
+
+   ## This works, and we can now create and run notebooks :)
+
+   ## TODO: Recreate notes with more details + without debugging comments
