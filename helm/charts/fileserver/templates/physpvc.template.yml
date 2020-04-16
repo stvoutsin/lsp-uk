@@ -8,5 +8,5 @@ spec:
   resources:
     requests:
       storage: {{.Values.shared_volume_size}}
-  storageClassName: standard
+  storageClassName: fast
 

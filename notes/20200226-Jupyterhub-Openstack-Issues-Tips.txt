@@ -176,3 +176,19 @@ In Apache proxy config:
         RewriteRule ^/nb\/(.*)           ws://192.168.0.5:30656/nb/$1 [P,L]
         RewriteCond %{HTTP:Upgrade} !=websocket [NC]
 ..
+
+
+
+
+
+## Issue 
+## -------------------------------------------
+
+Exception when creating Cluster:
+
+[etcd] Failed to bring up Etcd Plane: etcd cluster is unhealthy: hosts [192.168.0.26] failed to report healthy. Check etcd container logs on each host for more information
+
+This happens when first creating a cluster, when trying to attach the master nodes to the Cluster
+
+Fix: Don't reuse nodes for new cluster. Turns out that there are configurations and certificates that dont get removed when deleting a previous cluster
+
