@@ -49,10 +49,14 @@ secrets:
 # (due to the lack of scisql function support).
 querymonkey_replicas: 0
 
+service:
+  type: LoadBalancer
+  port: 80
+
 # Settings for the ingress rules.
 ingress:
   # Force SSL, which is used in annotations and rewriting redirects.
-  ssl: True
+  ssl: False
   # Additional annotations to use for endpoints that allow anonymous
   # access, such as /capabilities, /availability
   anonymous_annotations: {}

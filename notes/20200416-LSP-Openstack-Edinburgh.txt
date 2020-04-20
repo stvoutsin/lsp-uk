@@ -1,0 +1,343 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2019, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+########################################################
+##    LSP (with Rancher/Kubernetes) on Openstack      ##
+########################################################
+
+
+## Setup 2 Master nodes, 4 Worker nodes, 1 Admin node & 1 Gateway node
+## At least 2 Cores, at least 2 GB RAM on each node
+
+
+## [All Nodes]
+
+## Install Docker
+sudo apt-get update
+sudo apt-get install docker.io
+
+
+
+## [Admin node] Deploy Rancher on Admin Node
+##---------------------------------------------------------
+
+## Install Rancher. Documentation is at https://rancher.com/docs/rancher/v2.x/en/
+sudo docker run -d --restart=unless-stopped -p 80:80 -p 443:443  rancher/rancher:latest
+
+
+
+## [Admin node] Create Cluster 
+##---------------------------------------------------------
+
+## Setup a Public IP for Rancher, and configure new cluster in GUI
+## Master node should have all 3 options checked (etcd, worker, ..)
+
+## Use following config for cluster creation:
+
+https://github.com/lsst-uk/jupyterhub/blob/master/rancher/jupyter.yml
+
+## Once created, copy and run join command on each node of cluster
+## For workers only check the "worker" option
+
+
+## Need to set the openstack cloud provider configuration, with an update after the cluster is configured!
+## Update cluster configuration from Rancher, add the opentack cloud configuration with the right credentials
+
+
+cloud_provider: 
+  name: "openstack"
+  openstackCloudProvider: 
+    block_storage: 
+      bs-version: "auto"
+      ignore-volume-az: true
+      trust-device-path: false
+    global: 
+      auth-url: "https://openstack.stfc.ac.uk:5000/v3"
+      domain-name: "default"
+      password: ""
+      tenant-id: ""
+      username: ""
+    load_balancer: 
+      create-monitor: false
+      manage-security-groups: false
+      monitor-delay: 0
+      monitor-max-retries: 0
+      monitor-timeout: 0
+      use-octavia: false
+    metadata: 
+      request-timeout: 0
+
+
+## [Master Nodes]
+##---------------------------------------------------------
+
+sudo docker run -d --privileged --restart=unless-stopped --net=host -v /etc/kubernetes:/etc/kubernetes -v /var/run:/var/run rancher/rancher-agent:v2.3.5 --server https://host --token  --ca-checksum  --etcd --controlplane --worker
+
+
+
+## [Worker Nodes]
+##---------------------------------------------------------
+
+sudo docker run -d --privileged --restart=unless-stopped --net=host -v /etc/kubernetes:/etc/kubernetes -v /var/run:/var/run rancher/rancher-agent:v2.3.5 --server https://host --token  --ca-checksum  --worker
+
+
+## [Admin Node] Setup kubectl
+##---------------------------------------------------------
+
+## Install kubectl
+
+curl -LO https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl
+sudo chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin/kubectl
+
+## Copy kubectl config from Rancher GUI, into ~/.kube/config
+
+
+
+## [Admin Node]  Deploy Kubernetes Dashboard
+##---------------------------------------------------------
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta6/aio/deploy/recommended.yaml
+
+cat > "${HOME}/dashboard-adminuser.yaml" << EOF
+
+	apiVersion: rbac.authorization.k8s.io/v1
+	kind: ClusterRoleBinding
+	metadata:
+	  name: admin-user
+	roleRef:
+	  apiGroup: rbac.authorization.k8s.io
+	  kind: ClusterRole
+	  name: cluster-admin
+	subjects:
+	- kind: ServiceAccount
+	  name: admin-user
+	  namespace: kubernetes-dashboard
+
+EOF
+
+
+kubectl apply -f dashboard-adminuser.yaml
+
+
+
+kubectl -n kube-system describe secret
+
+## Copy tiller account secret and use as token for the GUI
+
+
+
+RANCHERIP=192.41.108.35
+CLUSTER_ID=c-5bl8f
+
+
+##---------------------------------------------------------
+## [Local Machine] Kubernetes Dashboard Web GUI 
+##---------------------------------------------------------
+
+curl https://${RANCHER_IP}/k8s/clusters/${CLUSTER_ID}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login
+
+
+
+## [Admin Node]  Fetch LSP create scripts
+##---------------------------------------------------------
+
+git clone https://github.com/stvoutsin/lsp-uk (Unstable)
+
+
+
+## [Admin Node] Set nublado configuration variables (OAuth)
+##---------------------------------------------------------
+
+pushd lsp-deploy/develop-gke/
+    nano nublado-values.yaml
+        ..
+        fqdn: '192.41.108.30'
+        oauth_client_id: '${github_client_id}'
+	oauth_secret: '${github_secret}'
+        ..
+
+
+## [Admin Node] Install tiller account & Certs
+##---------------------------------------------------------
+
+   ## Create Certificates 
+  sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/apache-selfsigned.key -out /etc/ssl/certs/apache-selfsigned.crt
+  sudo scp -r /etc/ssl/private/ . 
+  sudo scp -r /etc/ssl/certs/apache-selfsigned.crt private/ 
+  sudo chown ubuntu:root private/
+
+
+  ## Had to run the following from previous notes when installing k8s, but we probably dont need need these?
+  kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+  helm init --service-account tiller --override spec.selector.matchLabels.'name'='tiller',spec.selector.matchLabels.'app'='helm' --output yaml | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@' | kubectl apply -f -
+
+
+
+## [Admin Node] Install LSP Helm charts (If using the Charts from the stvoutsin/lsp-uk repo, the changes to the configuration files are not needed)
+##---------------------------------------------------------
+
+pushd lsp-uk/helm/charts/
+ 
+   ## Install Tiller
+   sudo ./install_tiller.sh
+
+   ## Install ingress
+   sudo ./install_ingress.sh private/apache-selfsigned.crt private/apache-selfsigned.key 
+
+   ## Set Public IP
+   sudo ./public_ip.sh
+
+      > Retrieving public IP of your LSST Science Platform...
+	Error from server (NotFound): namespaces "nginx" not found
+
+
+
+   # Fetch public charts on github
+   helm repo add lsstsqre https://lsst-sqre.github.io/charts/
+   helm repo update
+
+   ## Installing Fileserver
+   helm install fileserver --name fileserver --namespace fileserver
+
+   ## Installing Landing Page
+   helm install landing-page --name landing-page --namespace landing-page
+
+   ## Installing CADC TAP service
+   helm install cadc-tap --name tap --namespace tap
+
+   ## Installing Firefly
+   helm install firefly --name firefly --namespace firefly
+
+ 
+   nano ~/nublado/values.yaml
+
+   ## Set the Fileserver-host values
+   ..
+
+	   mountpoints: |
+	  [
+	    {
+	      "mountpoint": "/home",
+	      "mode": "rw",
+	      "fileserver-export": "/home",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/datasets",
+	      "fileserver-export": "/datasets",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/software",
+	      "fileserver-export": "/software",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/project",
+	      "mode": "rw",
+	      "fileserver-export": "/project",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/scratch",
+	      "mode": "rw",
+	      "fileserver-export": "/scratch",
+	      "fileserver-host": "10.43.213.26"
+	    }
+	  ]
+
+    ..
+
+
+  
+  lab:   
+    image_name: 'lsstsqre/sciplat-lab:latest'
+   ..
+
+   ## Installing Nublado
+   helm install nublado --name nublado --namespace nublado --values nublado-values.yaml
+
+
+
+   ## [Gateway Node] Update Proxy node, with proxy entries for all the services
+   ##---------------------------------------------------------
+
+   sudo nano /etc/apache2/sites-enabled/000-default.conf
+      
+     ..
+
+        ## PROXY ENTRIES HERE ##
+        ProxyPassMatch    ^/firefly\/(.*)$  http://192.168.0.10:31177/suit/$1
+        ProxyPassReverse  ^/firefly\/(.*)$  http://192.168.0.10:31177/suit/$1
+
+        ProxyPassMatch    ^/firefly  http://192.168.0.10:31177/suit
+        ProxyPassReverse  ^/firefly  http://192.168.0.10:31177/suit
+
+
+        ProxyPassMatch    ^/portal\/app/\/(.*)$  http://192.168.0.10:31177/suit/$1
+        ProxyPassReverse  ^/portal/\app/\/(.*)$  http://192.168.0.10:31177/suit/$1
+
+        ProxyPassMatch    ^/js9\/(.*)$  http://192.168.0.10:31310/$1
+        ProxyPassReverse  ^/js9\/(.*)$  http://192.168.0.10:31310/$1
+
+        ProxyPassMatch    ^/wf\/(.*)$  http://192.168.0.10:30656/$1
+        ProxyPassReverse  ^/wf\/(.*)$  http://192.168.0.10:30656/$1
+
+
+        ProxyPassMatch    ^/nublado\/(.*)$  http://192.168.0.10:32303/$1
+        ProxyPassReverse  ^/nublado\/(.*)$  http://192.168.0.10:32303/$1
+
+        ProxyPassMatch    ^/nb\/(.*)$  http://192.168.0.10:32303/nb/$1
+        ProxyPassReverse  ^/nb\/(.*)$  http://192.168.0.10:32303/nb/$1
+
+        ProxyPassMatch    ^/tap\/(.*)$  http://192.168.0.10:30306/tap/$1
+        ProxyPassReverse  ^/tap\/(.*)$  http://192.168.0.10:30306/tap/$1
+
+        ProxyPassMatch    ^/api\/(.*)$  http://192.168.0.10:30306/api/$1
+        ProxyPassReverse  ^/api\/(.*)$  http://192.168.0.10:30306/api/$1
+
+        ProxyPassMatch    ^/landingpage\/(.*)$  http://192.168.0.10:32084/$1
+        ProxyPassReverse  ^/landingpage\/(.*)$  http://192.168.0.10:32084/$1
+
+        #ProxyPassMatch    ^/(.*)$  http://192.168.0.10:30254/$1
+        #ProxyPassReverse  ^/(.*)$  http://192.168.0.10:30254/$1
+
+
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} =websocket [NC]     
+        RewriteRule ^/firefly\/(.*)           ws://192.168.0.10:31177/$1 [P,L]
+        RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+        RewriteRule ^/firefly\/(.*)           http://192.168.0.12:31177/$1 [P,L]
+
+
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} =websocket [NC]
+        RewriteRule ^/nb\/(.*)           ws://192.168.0.10:32303/nb/$1 [P,L]
+        RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+        #RewriteRule ^/nb\/(.*)           http://192.168.0.5:30656/nb/$1 [P,L]
+
+
+
+  ...
+   
+

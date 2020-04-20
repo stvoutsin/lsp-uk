@@ -8,6 +8,7 @@ metadata:
 spec:
   selector:
     app: {{ template "cadc-tap.fullname" . }}-tap-server
+  type: LoadBalancer
   ports:
   - protocol: TCP
     port: 80
