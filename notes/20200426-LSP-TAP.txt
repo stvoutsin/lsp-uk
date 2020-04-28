@@ -1,0 +1,204 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2019, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+########################################################
+##    LSP TAP Service on Openstack                    ##
+########################################################
+
+
+## Investigate how the TAP components (K8s deployments) are connected
+## ------------------------------------------------------------------
+
+## Links:
+## https://github.com/lsst-sqre/lsst-tap-service - TAP Service 
+## https://github.com/lsst-sqre/charts/tree/master/cadc-tap - Helm Chart
+
+## Check what Kubernetes deployments are created when deploying the CADC (LSST) TAP Helm Chart
+## -------------------------------------------------------------------------------------------
+
+kubectl get deployments -n tap
+
+NAME                         READY   UP-TO-DATE   AVAILABLE   AGE
+tap-cadc-tap-mock-qserv      1/1     1            1           9d
+tap-cadc-tap-querymonkey     0/0     0            0           9d
+tap-cadc-tap-tap-schema-db   1/1     1            1           9d
+tap-cadc-tap-tap-server      1/1     1            1           9d
+tap-cadc-tap-uws-db          1/1     1            1           9d
+
+
+
+## Check Mock Qserv
+## ------------------------------------------------------------------
+
+# Log into the MySQL mock qserv container 
+mysql -u qsmaster
+
+
+mysql> SHOW Databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| wise_00            |
++--------------------+
+2 rows in set (0.29 sec)
+
+
+
+
+
+## Check TAP endpoint
+## ------------------------------------------------------------------
+
+curl -L http://192.41.108.30/tap/tables
+
+# Shows the following schemas:
+
+gaiadr2
+hsc_rc2_w_2019_38
+sdss_stripe82_01
+SYS
+tap_schema
+uws
+wise_00
+
+# Looks like wise_00 matches the Database in Qserv, but what about the rest?
+
+
+
+
+## Check the configuration of the Helm chart for TAP
+## ------------------------------------------------------------------
+
+# Looking in values.yaml:
+
+  use_mock_qserv: True
+  
+  qserv_host: "qserv-master01:4040"
+
+
+
+
+## Check TAP_SCHEMA Database
+## ------------------------------------------------------------------
+
+mysql> SHOW DATABASES;
++--------------------+
+| Database           |
++--------------------+
+| TAP_SCHEMA         |
+| gaiadr2            |
+| information_schema |
+| tap_schema         |
++--------------------+
+4 rows in set (0.06 sec)
+
+
+
+# It looks like the TAP services shows tables from all separate services: 
+# TAP_SCHEMA, UWS, Qserv
+
+
+
+
+
+## Run a query on TAP_SCHEMA
+
+curl -L http://192.41.108.30/tap/sync?REQUEST=doQuery&QUERY=SELECT+TOP+1+*+from+TAP_SCHEMA.tables&LANG=ADQL
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<VOTABLE xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3">
+  <RESOURCE type="results">
+    <INFO name="QUERY_STATUS" value="OK" />
+    <INFO name="QUERY_TIMESTAMP" value="2020-04-26T19:40:29.012" />
+    <INFO name="QUERY" value="SELECT TOP 1 * from TAP_SCHEMA.tables" />
+    <TABLE>
+      <FIELD name="description" datatype="char" arraysize="512*">
+        <DESCRIPTION>describes tables in the tableset</DESCRIPTION>
+      </FIELD>
+      <FIELD name="schema_name" datatype="char" arraysize="512*">
+        <DESCRIPTION>the schema this table belongs to</DESCRIPTION>
+      </FIELD>
+      <FIELD name="table_index" datatype="int">
+        <DESCRIPTION>recommended sort order when listing tables</DESCRIPTION>
+      </FIELD>
+      <FIELD name="table_name" datatype="char" arraysize="64*">
+        <DESCRIPTION>the fully qualified table name</DESCRIPTION>
+      </FIELD>
+      <FIELD name="table_type" datatype="char" arraysize="8*">
+        <DESCRIPTION>one of: table view</DESCRIPTION>
+      </FIELD>
+      <FIELD name="utype" datatype="char" arraysize="512*">
+        <DESCRIPTION>lists the utype of tables in the tableset</DESCRIPTION>
+      </FIELD>
+      <DATA>
+        <TABLEDATA>
+          <TR>
+            <TD>GAIA source table.</TD>
+            <TD>gaiadr2</TD>
+            <TD>1</TD>
+            <TD>gaiadr2.gaia_source</TD>
+            <TD>table</TD>
+            <TD />
+          </TR>
+        </TABLEDATA>
+      </DATA>
+    </TABLE>
+    <INFO name="QUERY_STATUS" value="OK" />
+  </RESOURCE>
+</VOTABLE>
+
+
+
+
+## Query a Qserv Table
+## --------------------------------------------------------------
+
+curl -L http://192.41.108.30/tap/sync?REQUEST=doQuery&QUERY=SELECT+TOP+1+*+from+wise_00.allsky_3band_p1bm_frm&LANG=ADQL
+
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<VOTABLE xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3">
+  <RESOURCE type="results">
+    <INFO name="QUERY_STATUS" value="OK" />
+    <INFO name="QUERY_TIMESTAMP" value="2020-04-26T19:46:35.018" />
+    <INFO name="QUERY" value="SELECT TOP 1 * from wise_00.allsky_3band_p1bm_frm" />
+    <TABLE>
+      <FIELD name="band" datatype="int">
+        <DESCRIPTION>WISE band number</DESCRIPTION>
+      </FIELD>
+      <FIELD name="bunit" datatype="char" arraysize="21">
+        <DESCRIPTION>image data unit</DESCRIPTION>
+      </FIELD>
+
+		.....
+
+      <DATA>
+        <TABLEDATA />
+      </DATA>
+    </TABLE>
+    <INFO name="QUERY_STATUS" value="OK" />
+  </RESOURCE>
+</VOTABLE>
+
