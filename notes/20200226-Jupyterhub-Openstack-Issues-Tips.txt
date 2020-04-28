@@ -192,3 +192,47 @@ This happens when first creating a cluster, when trying to attach the master nod
 
 Fix: Don't reuse nodes for new cluster. Turns out that there are configurations and certificates that dont get removed when deleting a previous cluster
 
+
+
+## Issue 
+## -------------------------------------------
+
+Exception when attempting to login as different user than stvoutsin
+
+ (stvoutsin user is the creator of the LSST 0Auth app used by Nublado)
+
+
+{"exception": "builtins.RuntimeError", "reason": "Cannot determine user GIDs for pod spawn!", "action_status": "failed", "timestamp": 1587842737.2784886, "task_uuid": "554ecda5-b6b7-446e-822d-19725036386d", "action_type": "parse_auth_state", "task_level": [3]}
+[E 2020-04-25 19:25:37.280 JupyterHub web:1792] Uncaught exception GET /nb/hub/spawn (10.42.4.0)
+    HTTPServerRequest(protocol='http', host='192.41.108.30', method='GET', uri='/nb/hub/spawn', version='HTTP/1.1', remote_ip='10.42.4.0')
+    Traceback (most recent call last):
+      File "/usr/local/lib64/python3.6/site-packages/tornado/web.py", line 1703, in _execute
+        result = await result
+      File "/usr/local/lib/python3.6/site-packages/jupyterhub/handlers/pages.py", line 186, in get
+        spawner_options_form = await spawner.get_options_form()
+      File "/usr/local/lib/python3.6/site-packages/jupyterhubutils/spawner/lsstspawner.py", line 122, in get_options_form
+        _ = yield self.asynchronize(lm.auth_mgr.parse_auth_state)
+      File "/usr/lib64/python3.6/concurrent/futures/thread.py", line 56, in run
+        result = self.fn(*self.args, **self.kwargs)
+      File "/usr/local/lib/python3.6/site-packages/kubespawner/spawner.py", line 1560, in asynchronize
+        return method(*args, **kwargs)
+      File "/usr/local/lib/python3.6/site-packages/jupyterhubutils/lsstmgr/authmanager.py", line 186, in parse_auth_state
+        raise RuntimeError("Cannot determine user GIDs for pod spawn!")
+    RuntimeError: Cannot determine user GIDs for pod spawn!
+
+Fix: In Github, a user needs to be in an organization, that allows read access for its users
+
+
+
+## Issue 
+## -------------------------------------------
+
+Logging into the MySQL mock qserv container 
+mysql -u root
+ERROR 1045 (28000): Access denied for user 'root'@'localhost' (using password: NO)
+
+
+Fix: use username "qsmaster" with no password
+mysql -u qsmaster
+
+
