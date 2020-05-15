@@ -25,7 +25,7 @@
 ########################################################
 
 
-# The followign contains a set of instructions for setting up an Apache proxy for the LSP services
+# The following contains a set of instructions for setting up an Apache proxy for the LSP services
 
 
 
@@ -34,6 +34,9 @@
 # -----------------------------
 
 ..
+
+# Create a floating IP and assign to the VM
+
 
 
 # -----------------------------
@@ -106,45 +109,74 @@ sudo nano /etc/apache2/sites-available/000-default.conf
 
 
         ## PROXY ENTRIES HERE ##
-        ProxyPassMatch    ^/firefly\/(.*)$  http://192.168.0.16:30249/suit/$1
-        ProxyPassReverse  ^/firefly\/(.*)$  http://192.168.0.16:30249/suit/$1
+        ProxyPassMatch    ^/firefly\/(.*)$  http://192.168.0.13:32159/suit/$1
+        ProxyPassReverse  ^/firefly\/(.*)$  http://192.168.0.13:32159/suit/$1
 
-        ProxyPassMatch    ^/firefly  http://192.168.0.16:30249/suit
-        ProxyPassReverse  ^/firefly  http://192.168.0.16:30249/suit
+        ProxyPassMatch    ^/firefly  http://192.168.0.13:32159/suit
+        ProxyPassReverse  ^/firefly  http://192.168.0.13:32159/suit
 
+        ProxyPassMatch    ^/suit\/(.*)$  http://192.168.0.13:32159/suit/$1
+        ProxyPassReverse  ^/suit\/(.*)$  http://192.168.0.13:32159/suit/$1
 
-        ProxyPassMatch    ^/portal\/app/\/(.*)$  http://192.168.0.16:30249/suit/$1
-        ProxyPassReverse  ^/portal/\app/\/(.*)$  http://192.168.0.16:30249/suit/$1
+        ProxyPassMatch    ^/portal\/app/\/(.*)$  http://192.168.0.13:32159/suit/$1
+        ProxyPassReverse  ^/portal/\app/\/(.*)$  http://192.168.0.13:32159/suit/$1
 
-        ProxyPassMatch    ^/js9\/(.*)$  http://192.168.0.16:31770/$1
-        ProxyPassReverse  ^/js9\/(.*)$  http://192.168.0.16:31770/$1
+        ProxyPassMatch    ^/portal/suit\/(.*)$  http://192.168.0.13:32159/suit/$1
+        ProxyPassReverse  ^/portal/suit\/(.*)$  http://192.168.0.13:32159/suit/$1
 
-        ProxyPassMatch    ^/wf\/(.*)$  http://192.168.0.5:30533/$1
-        ProxyPassReverse  ^/wf\/(.*)$  http://192.168.0.5:30533/$1
+        ProxyPassMatch    ^/js9\/(.*)$  http://192.168.0.13:30557/$1
+        ProxyPassReverse  ^/js9\/(.*)$  http://192.168.0.13:30557/$1
 
+        ProxyPassMatch    ^/wf\/(.*)$  http://192.168.0.13:31292/$1
+        ProxyPassReverse  ^/wf\/(.*)$  http://192.168.0.13:31292/$1
 
-        ProxyPassMatch    ^/nublado\/(.*)$  http://192.168.0.10:30071/$1
-        ProxyPassReverse  ^/nublado\/(.*)$  http://192.168.0.10:30071/$1
+        ProxyPassMatch    ^/nublado\/(.*)$  http://192.168.0.13:31089/$1
+        ProxyPassReverse  ^/nublado\/(.*)$  http://192.168.0.13:31089/$1
 
-        ProxyPassMatch    ^/nb\/(.*)$  http://192.168.0.10:30071/nb/$1
-        ProxyPassReverse  ^/nb\/(.*)$  http://192.168.0.10:30071/nb/$1
+        ProxyPassMatch    ^/nb\/(.*)$  http://192.168.0.13:31089/nb/$1
+        ProxyPassReverse  ^/nb\/(.*)$  http://192.168.0.13:31089/nb/$1
 
-        #ProxyPassMatch    ^/(.*)$  http://192.168.0.10:30254/$1
-        #ProxyPassReverse  ^/(.*)$  http://192.168.0.10:30254/$1
+        ProxyPassMatch    ^/nb(.*)$  http://192.168.0.13:31089/nb/$1
+        ProxyPassReverse  ^/nb(.*)$  http://192.168.0.13:31089/nb/$1
 
+        ProxyPassMatch    ^/tap\/(.*)$  http://192.168.0.13:31348/tap/$1
+        ProxyPassReverse  ^/tap\/(.*)$  http://192.168.0.13:31348/tap/$1
 
-        RewriteEngine On
-        RewriteCond %{HTTP:Upgrade} =websocket [NC]     
-        RewriteRule ^/firefly\/(.*)           ws://192.168.0.10:30249/$1 [P,L]
-        RewriteCond %{HTTP:Upgrade} !=websocket [NC]
-        RewriteRule ^/firefly\/(.*)           http://192.168.0.10:30249/$1 [P,L]
+        ProxyPassMatch    ^/api\/(.*)$  http://192.168.0.13:31348/api/$1
+        ProxyPassReverse  ^/api\/(.*)$  http://192.168.0.13:31348/api/$1
+     
+        ProxyPassMatch    ^/landingpage\/(.*)$  http://192.168.0.13:30505/$1
+        ProxyPassReverse  ^/landingpage\/(.*)$  http://192.168.0.13:30505/$1
+
+        ProxyPassMatch    ^/(.*)$  http://192.168.0.13:30505/$1
+        ProxyPassReverse  ^/(.*)$  http://192.168.0.13:30505/$1
+
+        ProxyPassMatch    ^/static/(.*)$  http://192.168.0.13:30505/$1
+        ProxyPassReverse  ^/static/(.*)$  http://192.168.0.13:30505/$1
 
 
         RewriteEngine On
         RewriteCond %{HTTP:Upgrade} =websocket [NC]
-        RewriteRule ^/nb\/(.*)           ws://192.168.0.5:30656/nb/$1 [P,L]
+        RewriteRule ^/firefly\/(.*)           ws://192.168.0.13:32159/$1 [P,L]
         RewriteCond %{HTTP:Upgrade} !=websocket [NC]
-        #RewriteRule ^/nb\/(.*)           http://192.168.0.5:30656/nb/$1 [P,L]
+        RewriteRule ^/firefly\/(.*)           http://192.168.0.13:32159/$1 [P,L]
+
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} =websocket [NC]
+        RewriteRule ^/suit\/(.*)           ws://192.168.0.13:32159/suit/$1 [P,L]
+        RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+        RewriteRule ^/suit\/(.*)           http://192.168.0.13:32159/suit/$1 [P,L]
+
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} =websocket [NC]
+        RewriteRule ^/portal/suit\/(.*)           ws://192.168.0.13:32159/suit/$1 [P,L]
+        RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+        RewriteRule ^/portal/suit\/(.*)           http://192.168.0.13:32159/suit/$1 [P,L]
+
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} =websocket [NC]
+        RewriteRule ^/nb\/(.*)           ws://192.168.0.13:31089/nb/$1 [P,L]
+        RewriteCond %{HTTP:Upgrade} !=websocket [NC]
 
 
 
@@ -160,4 +192,6 @@ sudo nano /etc/apache2/sites-available/000-default.conf
 
 
 sudo systemctl restart apache2
+
+
 
