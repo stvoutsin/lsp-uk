@@ -183,9 +183,8 @@ CLUSTER_ID=
 # [Admin Node]  Fetch LSP create scripts
 #---------------------------------------------------------
 
-git clone https://github.com/stvoutsin/lsp-uk
+git clone https://github.com/lsst-uk/lsp-uk
 cd lsp-uk
-git checkout stv-20200716-deploy
 
 
 
