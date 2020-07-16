@@ -142,6 +142,8 @@ spec:
               value: '{{ template "nublado.fullname" . }}-hub.{{.Release.Namespace}}'
             - name: HUB_SERVICE_PORT_API
               value: '8081'
+            - name: JUPYTERHUB_API_TOKEN
+              value: '18ec2c27149a0df610affcdf07935997231e80b287121645ca1122807082d976'
             - name: GITHUB_ORGANIZATION_WHITELIST
               valueFrom:
                 secretKeyRef:
