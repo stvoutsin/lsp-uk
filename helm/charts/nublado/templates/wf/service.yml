@@ -5,7 +5,7 @@ metadata:
   labels:
     name: {{ template "nublado.fullname" . }}-wf-api
 spec:
-  type: NodePort
+  type: LoadBalancer
   ports:
   - name: api
     port: 8080

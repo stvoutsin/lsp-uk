@@ -4,11 +4,11 @@
 answers: {}
 docker_root_dir: /var/lib/docker
 enable_cluster_alerting: false
-enable_cluster_monitoring: true
+enable_cluster_monitoring: false
 enable_network_policy: false
 local_cluster_auth_endpoint:
   enabled: true
-name: lsp
+name: lsp-cluster
 # 
 # Rancher Config
 # 
@@ -19,28 +19,29 @@ rancher_kubernetes_engine_config:
   authorization: {}
   bastion_host:
     ssh_agent_auth: false
-  cloud_provider: 
-    name: "openstack"
-    openstackCloudProvider: 
-      block_storage: 
-        bs-version: "auto"
+  cloud_provider:
+    name: openstack
+    openstackCloudProvider:
+      block_storage:
+        bs-version: auto
         ignore-volume-az: true
         trust-device-path: false
-      global: 
-        auth-url: "http://192.41.108.20:5000/v3"
-        domain-name: "default"
-        password: ""
-        tenant-id: ""
-        username: ""
-      load_balancer: 
+      global:
+        auth-url: ''
+        domain-name: default
+        tenant-id: 
+        username: 
+        password:
+      load_balancer:
         create-monitor: false
         manage-security-groups: false
-        monitor-delay: 0
+        monitor-delay: '0'
         monitor-max-retries: 0
-        monitor-timeout: 0
+        monitor-timeout: '0'
         use-octavia: false
-      metadata: 
+      metadata:
         request-timeout: 0
+      route: {}
   ignore_docker_version: true
 # 
 # # Currently only nginx ingress provider is supported.
@@ -96,7 +97,7 @@ rancher_kubernetes_engine_config:
   services:
     etcd:
       backup_config:
-        enabled: false
+        enabled: true
         interval_hours: 12
         retention: 6
         safe_timestamp: false
@@ -119,4 +120,5 @@ rancher_kubernetes_engine_config:
     kubeproxy: {}
     scheduler: {}
   ssh_agent_auth: false
+
 

@@ -9,7 +9,8 @@ scheme: 'https://'
 # GitHub Application settings for OAuth apps
 # Get these from github.com OAuth settings by creating an app
 # Something like these (these don't really exist)
-
+#oauth_client_id: 'a357c71304f31654c665'
+#oauth_secret: '2eb0f52c3a416e7287287e478599314d451fef2d'
 
 # Set up debugging, set to enable
 debug: 'true'
@@ -37,7 +38,7 @@ hub:
   gid: 768
   #proxy_auth_token: ''
   #crypto_key: ''
-  image: 'lsstsqre/sciplat-hub:latest'
+  image: 'lsstsqre/sciplat-hub:0.18.8'
   persistent_home: True
 
 # Dask settings
@@ -105,29 +106,29 @@ mountpoints: |
       "mountpoint": "/home",
       "mode": "rw",
       "fileserver-export": "/home",
-      "fileserver-host": "10.43.148.189"
+      "fileserver-host": "10.43.215.197"
     },
     {
       "mountpoint": "/datasets",
       "fileserver-export": "/datasets",
-      "fileserver-host": "10.43.148.189"
+      "fileserver-host": "10.43.215.197"
     },
     {
       "mountpoint": "/software",
       "fileserver-export": "/software",
-      "fileserver-host": "10.43.148.189"
+      "fileserver-host": "10.43.215.197"
     },
     {
       "mountpoint": "/project",
       "mode": "rw",
       "fileserver-export": "/project",
-      "fileserver-host": "10.43.148.189"
+      "fileserver-host": "10.43.215.197"
     },
     {
       "mountpoint": "/scratch",
       "mode": "rw",
       "fileserver-export": "/scratch",
-      "fileserver-host": "10.43.148.189"
+      "fileserver-host": "10.43.215.197"
     }
   ]
 
@@ -242,4 +243,3 @@ jupyterhub_config: |
   # External proxy
   c.ConfigurableHTTPProxy.should_start = False
   c.ConfigurableHTTPProxy.api_url = lc.proxy_api_url
-
