@@ -1,0 +1,13 @@
+Some additional notes from deploying the LSP at RAL
+
+1) Storageclass
+
+The helm charts attempt to create and use their own default K8s storageclass. This may produce odd results if a default storageclass already exists.
+The storageclass is defined in helm/charts/fileserver/templates/storageclass.yml and may require modification for the specific cloud, e.g. changing the az name.
+
+2) OAuth Callback URL
+
+I had to change this from http to https to work with my proxy setup. The OAuth callback URL is set in helm/charts/nublado/templates/jupyterhub/secrets.template.yml
+
+
+
