@@ -161,8 +161,9 @@ pushd /home/ubuntu/suit/docker
 
     # Login to Dockerhub
     docker login
-    docker build ../../docker/ --tag stvoutsin/suit:latest
-    docker push
+    docker build docker/ --tag stvoutsin/suit:latest
+    docker push stvoutsin/suit:latest
+
 
 popd
 
