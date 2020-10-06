@@ -25,7 +25,7 @@
 ########################################################
 
 
-# The followign contains a set of instructions for setting up an Apache proxy for the LSP services
+# The following contains a set of instructions for setting up an Apache proxy for the LSP services
 
 
 

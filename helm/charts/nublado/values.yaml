@@ -106,29 +106,29 @@ mountpoints: |
       "mountpoint": "/home",
       "mode": "rw",
       "fileserver-export": "/home",
-      "fileserver-host": "10.43.215.197"
+      "fileserver-host": ""
     },
     {
       "mountpoint": "/datasets",
       "fileserver-export": "/datasets",
-      "fileserver-host": "10.43.215.197"
+      "fileserver-host": ""
     },
     {
       "mountpoint": "/software",
       "fileserver-export": "/software",
-      "fileserver-host": "10.43.215.197"
+      "fileserver-host": ""
     },
     {
       "mountpoint": "/project",
       "mode": "rw",
       "fileserver-export": "/project",
-      "fileserver-host": "10.43.215.197"
+      "fileserver-host": ""
     },
     {
       "mountpoint": "/scratch",
       "mode": "rw",
       "fileserver-export": "/scratch",
-      "fileserver-host": "10.43.215.197"
+      "fileserver-host": ""
     }
   ]
 
