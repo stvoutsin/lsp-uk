@@ -1,0 +1,271 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2020, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+########################################################
+##    RSP Deploying Custom Firefly/SUIT Version       ##
+########################################################
+
+
+
+## Install JDK 8
+## ---------------------
+sudo apt-get install openjdk-8-jdk
+
+java -version
+      > openjdk version "1.8.0_265"
+	OpenJDK Runtime Environment (build 1.8.0_265-8u265-b01-0ubuntu2~18.04-b01)
+	OpenJDK 64-Bit Server VM (build 25.265-b01, mixed mode)
+
+
+## Install Gradle 4.x
+## ---------------------
+sudo apt-get install unzip
+wget https://services.gradle.org/distributions/gradle-4.4-bin.zip
+sudo unzip -d /opt/gradle gradle-4.4-bin.zipsudo mkdir /opt/gradle
+export PATH=$PATH:/opt/gradle/gradle-4.4/bin
+gradle -version
+
+      > ------------------------------------------------------------
+	Gradle 4.4
+	------------------------------------------------------------
+
+	Build time:   2017-12-06 09:05:06 UTC
+	Revision:     cf7821a6f79f8e2a598df21780e3ff7ce8db2b82
+
+	Groovy:       2.4.12
+	Ant:          Apache Ant(TM) version 1.9.9 compiled on February 2 2017
+	JVM:          1.8.0_265 (Private Build 25.265-b01)
+	OS:           Linux 4.15.0-109-generic amd64
+
+
+
+## Install Node.js 8.x
+## ---------------------
+sudo mkdir /opt/node
+cd /opt/node
+sudo wget https://nodejs.org/dist/latest-v12.x/node-v12.18.4-linux-x64.tar.gz
+sudo tar -xzvf node-v12.18.4-linux-x64.tar.gz 
+sudo rm -f  node-v12.18.4-linux-x64.tar.gz 
+export PATH=$PATH:/opt/node/node-v12.18.4-linux-x64/bin
+
+node --version
+> v12.18.4
+
+
+
+## Install yarn
+## --------------------
+sudo su
+export PATH=$PATH:/opt/node/node-v12.18.4-linux-x64/bin
+npm install yarn -g
+
+> yarn@1.22.10 preinstall /opt/node/node-v12.18.4-linux-x64/lib/node_modules/yarn
+> :; (node ./preinstall.js > /dev/null 2>&1 || true)
+
+/opt/node/node-v12.18.4-linux-x64/bin/yarn -> /opt/node/node-v12.18.4-linux-x64/lib/node_modules/yarn/bin/yarn.js
+/opt/node/node-v12.18.4-linux-x64/bin/yarnpkg -> /opt/node/node-v12.18.4-linux-x64/lib/node_modules/yarn/bin/yarn.js
++ yarn@1.22.10
+added 1 package in 0.922s
+
+
+
+## Install HTMLDOC
+## --------------------
+
+apt-get install htmldoc
+
+
+
+## Clone firefly, suit, and `suit-onlinehelp' repositories:
+## ----------------------------------------------------------
+git clone https://github.com/Caltech-IPAC/firefly
+git clone https://github.com/lsst/suit
+git clone https://github.com/lsst/suit-onlinehelp
+
+
+
+## Build with Gradle
+## ---------------------
+
+sudo su
+cd suit
+export PATH=$PATH:/opt/gradle/gradle-4.4/bin
+gradle :suit:warAll
+
+# Exceptions..
+
+## Works after changing suit-onlinehelp to suit-help
+mv suit-onlinehelp suit-help
+
+
+
+
+## Change the TAP endpoints
+## ------------------------
+
+pushd /home/ubuntu/suit/
+
+	nano src/suit/js/SUIT.js
+	.. 
+
+	let tapServices= [
+	    tapEntry('OSA', 'http://tap.roe.ac.uk/osa'),
+	    tapEntry('WSA', 'http://tap.roe.ac.uk/wsa'),
+	    tapEntry('VSA', 'http://tap.roe.ac.uk/vsa'),
+	    tapEntry('SSA', 'http://tap.roe.ac.uk/ssa'),
+	    tapEntry('CADC', 'https://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/tap'),
+	    tapEntry('GAIA', 'https://gea.esac.esa.int/tap-server/tap'),
+	    tapEntry('GAVO', 'http://dc.g-vo.org/tap'),
+	    tapEntry('HSA',  'https://archives.esac.esa.int/hsa/whsa-tap-server/tap'),
+	    tapEntry('IRSA', 'https://irsa.ipac.caltech.edu/TAP'),
+	    tapEntry('MAST', 'https://vao.stsci.edu/CAOMTAP/TapService.aspx'),
+	    tapEntry('NED', 'https://ned.ipac.caltech.edu/tap/'),
+	];
+
+popd
+
+
+# Build again..
+gradle :suit:warAll
+
+
+## Copy Docker folder from Firefly
+## -------------------------------
+
+mkdir /home/ubuntu/suit/docker
+pushd /home/ubuntu/suit/docker
+    sudo cp ../../firefly/docker/base/* .
+
+    # Copy war file into Docker container
+    cp ../build/dist/suit.war .
+
+    # Login to Dockerhub
+    docker login
+    docker build docker/ --tag stvoutsin/suit:latest
+    docker push stvoutsin/suit:latest
+
+
+popd
+
+
+## Change Firefly Helm Chart to point to new Image
+## -----------------------------------------------
+ssh lsp-admin
+
+nano firefly/values.yaml
+  ...
+	image:
+	  repository: stvoutsin/suit
+	  tag: latest
+	  pullPolicy: Always
+ ...
+
+
+
+## Deploy new Firefly/ SUIT
+## -----------------------------------------------
+
+helm install firefly --name firefly --namespace firefly
+NAME:   firefly
+LAST DEPLOYED: Thu Oct  1 12:51:09 2020
+NAMESPACE: firefly
+STATUS: DEPLOYED
+
+RESOURCES:
+==> v1/Deployment
+NAME           AGE
+firefly        0s
+firefly-redis  0s
+
+==> v1/Pod(related)
+NAME                            AGE
+firefly-59c967cb9b-rdj68        0s
+firefly-redis-75c96dc865-6brs4  0s
+
+==> v1/Secret
+NAME            AGE
+firefly-secret  1s
+
+==> v1/Service
+NAME           AGE
+firefly        0s
+firefly-redis  0s
+
+==> v1beta1/Ingress
+NAME     AGE
+firefly  0s
+
+
+
+
+## Check that it works
+## -----------------------------------------------
+
+lsp.roe.ac.uk/portal/app
+
+# TAP Services correctly appear, but trying to select one we get errors:
+# Javascript Exception:
+
+
+VOAnalyzer.js:1155 Uncaught TypeError: Cannot read property 'match' of null
+    at applyTokenSub (VOAnalyzer.js:1155)
+    at TableRenderer.js:675
+    at renderWithHooks (react-dom.development.js:16260)
+    at updateFunctionComponent (react-dom.development.js:18347)
+    at updateSimpleMemoComponent (react-dom.development.js:18285)
+    at updateMemoComponent (react-dom.development.js:18188)
+    at beginWork$1 (react-dom.development.js:20248)
+    at HTMLUnknownElement.callCallback (react-dom.development.js:336)
+    at Object.invokeGuardedCallbackDev (react-dom.development.js:385)
+    at invokeGuardedCallback (react-dom.development.js:440)
+
+
+## Change VOAnalyzer.js and try again
+# firefly/src/firefly/js/util/VOAnalyzer.js
+# Add check for !val in line 1155
+
+
+export function applyTokenSub(tableModel, val='', rowIdx, def) {
+    if (!val){
+        return def;
+    }
+    const vars = val.match && val.match(/\${[\w -.]+}/g);
+    let rval = val;
+    if (vars) {
+        vars.forEach((v) => {
+            const [,cname] = v.match(/\${([\w -.]+)}/) || [];
+            const col = getColumnByID(tableModel, cname) || getColumn(tableModel, cname);
+            const cval = col ? getCellValue(tableModel, rowIdx, col.name) : '';  // if the variable cannot be resolved, return empty string
+            rval = rval.replace(v, cval);
+        });
+    }
+    return rval ? rval : rval === 0 ? 0 : def;
+}
+
+
+
+## Repeat Build & Redploy
+## Test again
+
+## Works now :)
+

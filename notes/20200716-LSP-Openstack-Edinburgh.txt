@@ -183,9 +183,8 @@ CLUSTER_ID=
 # [Admin Node]  Fetch LSP create scripts
 #---------------------------------------------------------
 
-git clone https://github.com/lsst-uk/lsp-uk
+git clone https://github.com/stvoutsin/lsp-uk
 cd lsp-uk
-
 
 
 # [Admin Node] Set nublado configuration variables (OAuth)
@@ -195,7 +194,7 @@ pushd scripts/
         ..
         fqdn: '192.41.108.30'
         oauth_client_id: '${github_client_id}'
-	oauth_secret: '${github_secret}'
+	      oauth_secret: '${github_secret}'
         ..
 popd
 
