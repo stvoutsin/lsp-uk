@@ -1,0 +1,883 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2020, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+#
+# Clone Rubin Deploy Scripts
+# ---------------------------
+
+git clone https://github.com/lsst-sqre/lsp-deploy
+
+
+# Install Vault
+# ---------------------------
+
+pushd ${HOME:?}/lsp-deploy/installer/
+
+
+kubectl create namespace vault
+
+helm repo add hashicorp https://helm.releases.hashicorp.com
+ > "hashicorp" has been added to your repositories
+
+
+helm install --name vault  --namespace vault    https://github.com/hashicorp/vault-helm/archive/v0.3.0.tar.gz
+
+	NAME:   vault
+	LAST DEPLOYED: Mon Nov  9 15:03:23 2020
+	NAMESPACE: vault
+	STATUS: DEPLOYED
+
+	RESOURCES:
+	==> v1/ClusterRole
+	NAME                              AGE
+	vault-agent-injector-clusterrole  1s
+
+	==> v1/ClusterRoleBinding
+	NAME                          AGE
+	vault-agent-injector-binding  1s
+
+	==> v1/ConfigMap
+	NAME          AGE
+	vault-config  1s
+
+	==> v1/Deployment
+	NAME                  AGE
+	vault-agent-injector  0s
+
+	==> v1/Service
+	NAME                      AGE
+	vault                     0s
+	vault-agent-injector-svc  0s
+
+	==> v1/ServiceAccount
+	NAME                  AGE
+	vault                 1s
+	vault-agent-injector  1s
+
+	==> v1/StatefulSet
+	NAME   AGE
+	vault  0s
+
+	==> v1beta1/ClusterRoleBinding
+	NAME                  AGE
+	vault-server-binding  1s
+
+	==> v1beta1/MutatingWebhookConfiguration
+	NAME                      AGE
+	vault-agent-injector-cfg  0s
+
+
+	NOTES:
+
+	Thank you for installing HashiCorp Vault!
+
+	Now that you have deployed Vault, you should look over the docs on using
+	Vault with Kubernetes available here:
+
+	https://www.vaultproject.io/docs/
+
+
+	Your release is named vault. To learn more about the release, try:
+
+	  $ helm status vault
+	  $ helm get vault
+
+
+
+
+# View the Vault UI
+# -----------------------------------
+The Vault UI is enabled but NOT exposed as service for security reasons. The Vault UI can also be exposed via port-forwarding or through a ui configuration value.
+
+Expose the Vault UI with port-forwarding:
+
+$ kubectl port-forward vault-0 8200:8200
+Forwarding from 127.0.0.1:8200 -> 8200
+Forwarding from [::1]:8200 -> 8200
+##...
+
+
+
+# Initialize and unseal Vault
+# -------------------------------------
+
+kubectl get --namespace vault pods -l app.kubernetes.io/name=vault
+NAME      READY   STATUS    RESTARTS   AGE
+vault-0   0/1     Pending   0          2m9s
+
+
+kubectl exec -ti vault-0 -- vault --namespace vault operator init
+
+
+# Check Kubernetes
+> error while running "VolumeBinding" filter plugin for pod "vault-0": pod has unbound immediate PersistentVolumeClaims
+
+# https://stackoverflow.com/questions/60655747/configuring-vault-helm-pvc
+
+
+# Create Storage Class
+# 
+
+cat > "storageclass.yml" << EOF
+
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: fast
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: kubernetes.io/cinder
+parameters:
+  availability: nova
+
+EOF
+
+
+# Create PV
+# 
+
+cat > "PersistentVolume001.yaml" << EOF
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: data-vault-0
+  labels:
+    type: local
+spec:
+  storageClassName: fast
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  claimRef:
+    namespace: vault
+    name: data-vault-0
+  hostPath:
+    path: "/mnt/data"
+
+
+EOF
+
+
+kubectl --namespace vault apply -f storageclass.yml 
+kubectl --namespace vault create -f PersistentVolume001.yaml
+
+
+# Purge vault and install again..
+
+helm del --purge vault;
+helm install --name vault  --namespace vault    https://github.com/hashicorp/vault-helm/archive/v0.3.0.tar.gz
+
+
+# Check pod..
+> Readiness probe failed: Key Value --- ----- Seal Type shamir Initialized false Sealed true Total Shares 0 Threshold 0 Unseal Progress 0/0 Unseal Nonce n/a Version n/a HA Enabled false
+
+
+
+# Try a different tutorial
+# --------------------------
+
+# https://learn.hashicorp.com/tutorials/vault/kubernetes-minikube
+# Install the latest version of the Consul Helm chart with parameters helm-consul-values.yml applied.
+
+
+
+# Install consul
+
+helm install --namespace vault --name consul   hashicorp/consul --values helm-consul-values.yml
+NAME:   consul
+LAST DEPLOYED: Mon Nov  9 19:49:10 2020
+NAMESPACE: vault
+STATUS: DEPLOYED
+
+RESOURCES:
+==> v1/ConfigMap
+NAME                         AGE
+consul-consul-client-config  0s
+consul-consul-server-config  0s
+
+==> v1/DaemonSet
+NAME           AGE
+consul-consul  0s
+
+==> v1/Pod(related)
+NAME                    AGE
+consul-consul-28dcg     0s
+consul-consul-frxwd     0s
+consul-consul-j4nds     0s
+consul-consul-server-0  0s
+
+==> v1/Role
+NAME                  AGE
+consul-consul-client  0s
+consul-consul-server  0s
+
+==> v1/RoleBinding
+NAME                  AGE
+consul-consul-client  0s
+consul-consul-server  0s
+
+==> v1/Service
+NAME                  AGE
+consul-consul-dns     0s
+consul-consul-server  0s
+consul-consul-ui      0s
+
+==> v1/ServiceAccount
+NAME                  AGE
+consul-consul-client  0s
+consul-consul-server  0s
+
+==> v1/StatefulSet
+NAME                  AGE
+consul-consul-server  0s
+
+==> v1beta1/PodDisruptionBudget
+NAME                  AGE
+consul-consul-server  0s
+
+
+NOTES:
+
+Thank you for installing HashiCorp Consul!
+
+Now that you have deployed Consul, you should look over the docs on using 
+Consul with Kubernetes available here: 
+
+https://www.consul.io/docs/platform/k8s/index.html
+
+
+Your release is named consul.
+
+To learn more about the release if you are using Helm 2, run:
+
+  $ helm status consul
+  $ helm get consul
+
+To learn more about the release if you are using Helm 3, run:
+
+  $ helm status consul
+
+
+# Get Namespaces
+
+kubectl get pods --all-namespaces
+NAMESPACE              NAME                                         READY   STATUS      RESTARTS   AGE
+cattle-system          cattle-cluster-agent-7bcc9b45db-29dz5        1/1     Running     0          11d
+cattle-system          cattle-node-agent-8bz5j                      1/1     Running     0          11d
+cattle-system          cattle-node-agent-tvkfs                      1/1     Running     0          11d
+cattle-system          cattle-node-agent-zg66g                      1/1     Running     0          11d
+cattle-system          kube-api-auth-wx2zx                          1/1     Running     0          11d
+ingress-nginx          default-http-backend-67cf578fc4-vc69p        1/1     Running     0          11d
+ingress-nginx          nginx-ingress-controller-7nb9k               1/1     Running     568        11d
+ingress-nginx          nginx-ingress-controller-j5s54               1/1     Running     733        11d
+ingress-nginx          nginx-ingress-controller-tsk69               1/1     Running     743        11d
+kube-system            canal-nmtp4                                  2/2     Running     0          11d
+kube-system            canal-pz8st                                  2/2     Running     0          11d
+kube-system            canal-z7ptm                                  2/2     Running     0          11d
+kube-system            coredns-7c5566588d-6dvbh                     1/1     Running     0          11d
+kube-system            coredns-7c5566588d-l8bd2                     1/1     Running     0          11d
+kube-system            coredns-autoscaler-65bfc8d47d-67mxb          1/1     Running     0          11d
+kube-system            metrics-server-6b55c64f86-4vl4l              1/1     Running     0          11d
+kube-system            rke-coredns-addon-deploy-job-jfb99           0/1     Completed   0          11d
+kube-system            rke-ingress-controller-deploy-job-kdjcn      0/1     Completed   0          11d
+kube-system            rke-metrics-addon-deploy-job-4595x           0/1     Completed   0          11d
+kube-system            rke-network-plugin-deploy-job-klfl9          0/1     Completed   0          11d
+kube-system            tiller-deploy-5b4685ffbf-gwzkp               1/1     Running     0          11d
+kubernetes-dashboard   dashboard-metrics-scraper-76585494d8-drbhk   1/1     Running     0          11d
+kubernetes-dashboard   kubernetes-dashboard-b65488c4-9w9cp          1/1     Running     1          11d
+vaultconsul            vault-consul-6tm7s                           1/1     Running     0          78s
+vaultconsul            vault-consul-7gc6p                           1/1     Running     0          78s
+vaultconsul            vault-consul-glm2h                           1/1     Running     0          78s
+vaultconsul            vault-consul-server-0                        1/1     Running     0          78s
+
+
+# Create helm vault values
+
+nano helm-vault-values.yml
+server:
+  affinity: ""
+  ha:
+    enabled: true
+
+
+# Install Vault
+
+# helm install --namespace vault --name vault hashicorp/vault --values helm-consul-values.yml --set "server.dev.enabled=true" 
+# This fails due to api version of Helm
+
+# Manually fetch and install Vault Helm chart
+sudo cp ~/.helm/cache/archive/vault-0.8.0.tgz .
+tar -xzvf vault-0.8.0.tgz 
+nano vault/Chart.yml
+
+helm install --namespace vault --name vault vault --values helm-consul-values.yml --set "server.dev.enabled=true" 
+NAME:   vault
+LAST DEPLOYED: Mon Nov  9 20:00:51 2020
+NAMESPACE: vault
+STATUS: DEPLOYED
+
+RESOURCES:
+==> v1/ClusterRole
+NAME                              AGE
+vault-agent-injector-clusterrole  1s
+
+==> v1/ClusterRoleBinding
+NAME                          AGE
+vault-agent-injector-binding  1s
+
+==> v1/ConfigMap
+NAME          AGE
+vault-config  1s
+
+==> v1/Deployment
+NAME                  AGE
+vault-agent-injector  1s
+
+==> v1/Pod(related)
+NAME                                  AGE
+vault-agent-injector-5cb987648-6rw6f  1s
+
+==> v1/Service
+NAME                      AGE
+vault                     1s
+vault-agent-injector-svc  1s
+vault-internal            1s
+
+==> v1/ServiceAccount
+NAME                  AGE
+vault                 1s
+vault-agent-injector  1s
+
+==> v1/StatefulSet
+NAME   AGE
+vault  1s
+
+==> v1beta1/ClusterRoleBinding
+NAME                  AGE
+vault-server-binding  1s
+
+==> v1beta1/MutatingWebhookConfiguration
+NAME                      AGE
+vault-agent-injector-cfg  1s
+
+
+NOTES:
+
+Thank you for installing HashiCorp Vault!
+
+Now that you have deployed Vault, you should look over the docs on using
+Vault with Kubernetes available here:
+
+https://www.vaultproject.io/docs/
+
+
+Your release is named vault. To learn more about the release, try:
+
+  $ helm status vault
+  $ helm get manifest vault
+
+
+
+## NOTE: Not sure if this requires a PVC named "data-vault-0" beforehand or not..
+
+
+# List All pods
+
+kubectl get pods --all-namespaces
+NAMESPACE              NAME                                         READY   STATUS      RESTARTS   AGE
+cattle-system          cattle-cluster-agent-7bcc9b45db-29dz5        1/1     Running     0          11d
+cattle-system          cattle-node-agent-8bz5j                      1/1     Running     0          11d
+cattle-system          cattle-node-agent-tvkfs                      1/1     Running     0          11d
+cattle-system          cattle-node-agent-zg66g                      1/1     Running     0          11d
+cattle-system          kube-api-auth-wx2zx                          1/1     Running     0          11d
+ingress-nginx          default-http-backend-67cf578fc4-vc69p        1/1     Running     0          11d
+ingress-nginx          nginx-ingress-controller-7nb9k               1/1     Running     568        11d
+ingress-nginx          nginx-ingress-controller-j5s54               1/1     Running     733        11d
+ingress-nginx          nginx-ingress-controller-tsk69               1/1     Running     743        11d
+kube-system            canal-nmtp4                                  2/2     Running     0          11d
+kube-system            canal-pz8st                                  2/2     Running     0          11d
+kube-system            canal-z7ptm                                  2/2     Running     0          11d
+kube-system            coredns-7c5566588d-6dvbh                     1/1     Running     0          11d
+kube-system            coredns-7c5566588d-l8bd2                     1/1     Running     0          11d
+kube-system            coredns-autoscaler-65bfc8d47d-67mxb          1/1     Running     0          11d
+kube-system            metrics-server-6b55c64f86-4vl4l              1/1     Running     0          11d
+kube-system            rke-coredns-addon-deploy-job-jfb99           0/1     Completed   0          11d
+kube-system            rke-ingress-controller-deploy-job-kdjcn      0/1     Completed   0          11d
+kube-system            rke-metrics-addon-deploy-job-4595x           0/1     Completed   0          11d
+kube-system            rke-network-plugin-deploy-job-klfl9          0/1     Completed   0          11d
+kube-system            tiller-deploy-5b4685ffbf-gwzkp               1/1     Running     0          11d
+kubernetes-dashboard   dashboard-metrics-scraper-76585494d8-drbhk   1/1     Running     0          11d
+kubernetes-dashboard   kubernetes-dashboard-b65488c4-9w9cp          1/1     Running     1          11d
+vault                  consul-consul-j847t                          1/1     Running     0          4m30s
+vault                  consul-consul-lccvb                          1/1     Running     0          4m30s
+vault                  consul-consul-lvbmp                          1/1     Running     0          4m30s
+vault                  consul-consul-server-0                       1/1     Running     0          4m29s
+vault                  vault-0                                      0/1     Pending     0          3m51s
+vault                  vault-agent-injector-5cb987648-wdpd2         1/1     Running     0          3m52s
+
+
+
+# Get status of vault pod
+
+kubectl exec --namespace vault -it vault-0 -- vault status
+Key             Value
+---             -----
+Seal Type       shamir
+Initialized     true
+Sealed          false
+Total Shares    1
+Threshold       1
+Version         1.5.4
+Cluster Name    vault-cluster-8dc6826c
+Cluster ID      f427bbe0-0147-83f4-d283-c9a36d66a881
+HA Enabled      false
+
+
+# Initialize Vault
+
+kubectl exec --namespace vault -it vault-0 -- vault operator init -key-shares=5 -key-threshold=3 -format=json > vault-keys.json
+
+cat vault-keys.json 
+Error initializing: Error making API request.
+
+URL: PUT http://127.0.0.1:8200/v1/sys/init
+Code: 400. Errors:
+
+* Vault is already initialized
+
+# ??
+
+# Check logs..
+
+2020-11-09T22:00:23.178Z [INFO]  core: successful mount: namespace= path=secret/ type=kv
+You may need to set the following environment variable:
+    $ export VAULT_ADDR='http://0.0.0.0:8200'
+The unseal key and root token are displayed below in case you want to
+seal/unseal the Vault or re-authenticate.
+Unseal Key: QYEj65AR3PqLj8sVDcfyJZxwuhpvwLWn53z9Omd6CBE=
+Root Token: root
+Development mode should NOT be used in production installations!
+
+
+# Check Vault configuration on Dev server
+
+
+Properties
+  The properties of the dev servevault kv put secret/webapp/config username=”demoadmin” password=”demopwd123"r (some can be overridden with command line flags or by specifying a configuration file):
+  Initialized and unsealed - The server will be automatically initialized and unsealed. You don't need to use vault operator unseal. It is ready for use immediately.
+  In-memory storage - All data is stored (encrypted) in-memory. Vault server doesn't require any file permissions.
+  Bound to local address without TLS - The server is listening on 127.0.0.1:8200 (the default server address) without TLS.
+  Automatically Authenticated - The server stores your root access token so vault CLI access is ready to go. If you are accessing Vault via the API, you'll need to authenticate using the token printed out.
+  Single unseal key - The server is initialized with a single unseal key. The Vault is already unsealed, but if you want to experiment with seal/unseal, then only the single outputted key is required.
+  Key Value store mounted - A v2 KV secret engine is mounted at secret/.
+
+
+# Looks like if we are running in Dev mode, Vault is already unsealed
+
+
+# Check pods for 'vault' namespace
+# kubectl get pods --namespace vault
+NAME                                   READY   STATUS    RESTARTS   AGE
+consul-consul-j847t                    1/1     Running   0          106m
+consul-consul-lccvb                    1/1     Running   0          106m
+consul-consul-lvbmp                    1/1     Running   0          106m
+consul-consul-server-0                 1/1     Running   0          106m
+vault-0                                1/1     Running   0          19m
+vault-agent-injector-5cb987648-sdm7n   1/1     Running   0          19m
+
+
+# Vault login
+kubectl exec --namespace vault -it vault-0 -- /bin/sh
+
+/ $ vault login
+Token (will be hidden): root
+Success! You are now authenticated. The token information displayed below
+is already stored in the token helper. You do NOT need to run "vault login"
+again. Future Vault requests will automatically use this token.
+
+Key                  Value
+---                  -----
+token                root
+token_accessor       pKCTcqEwtbmlWkrqD7TuueVd
+token_duration       ∞
+token_renewable      false
+token_policies       ["root"]
+identity_policies    []
+policies             ["root"]
+
+
+vault kv put secret/webapp/config username="admin" password="pass"
+      > Key              Value
+	---              -----
+	created_time     2020-11-09T22:32:56.599078182Z
+	deletion_time    n/a
+	destroyed        false
+	version          1
+
+
+vault kv get secret/webapp/config
+>
+	====== Metadata ======
+	Key              Value
+	---              -----
+	created_time     2020-11-09T22:32:56.599078182Z
+	deletion_time    n/a
+	destroyed        false
+	version          1
+
+	====== Data ======
+	Key         Value
+	---         -----
+	password    pass
+	username    admin
+
+
+vault auth enable kubernetes
+> Success! Enabled kubernetes auth method at: kubernetes/
+	
+
+
+vault write auth/kubernetes/config \
+token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443" \
+kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt 
+
+> Success! Data written to: auth/kubernetes/config
+
+
+vault policy write webapp - <<EOF
+ path "secret/data/webapp/config" {
+ capabilities = ["read"]
+ }
+EOF
+
+> Success! Uploaded policy: webapp
+
+vault write auth/kubernetes/role/webapp \
+ bound_service_account_names=vault \
+ bound_service_account_namespaces=default \
+ policies=webapp \
+ ttl=24h
+
+> Success! Data written to: auth/kubernetes/role/webapp
+
+
+
+
+# Run Installer using RSP Scripts
+# ---------------------------------------
+
+kubectl apply -f initial-resources.yaml
+
+
+helm init --service-account tiller --history-max 200 --wait --upgrade
+
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update
+	
+HOSTNAME=lsp-dev-master-1 
+
+helm upgrade \
+   --install argocd argo/argo-cd \
+   --values argo-cd-values.yaml \
+   --set server.ingress.hosts="{$HOSTNAME}" \
+   --namespace argocd \
+   --wait --timeout 900 \
+   --version 2.6.1
+
+	Release "argocd" has been upgraded.
+	LAST DEPLOYED: Wed Nov 11 13:51:40 2020
+	NAMESPACE: argocd
+	STATUS: DEPLOYED
+
+	RESOURCES:
+	==> v1/ClusterRole
+	NAME                           AGE
+	argocd-application-controller  12d
+	argocd-server                  12d
+
+	==> v1/ClusterRoleBinding
+	NAME                           AGE
+	argocd-application-controller  12d
+	argocd-server                  12d
+
+	==> v1/ConfigMap
+	NAME                       AGE
+	argocd-cm                  12d
+	argocd-rbac-cm             12d
+	argocd-ssh-known-hosts-cm  12d
+	argocd-tls-certs-cm        12d
+
+	==> v1/Deployment
+	NAME                           AGE
+	argocd-application-controller  21s
+	argocd-dex-server              20s
+	argocd-redis                   20s
+	argocd-repo-server             21s
+	argocd-server                  21s
+
+	==> v1/Pod(related)
+	NAME                                            AGE
+	argocd-application-controller-6cdc667b94-xgtm5  20s
+	argocd-dex-server-7cc47d5d8f-ltsn9              20s
+	argocd-redis-7658c659f6-6x9cl                   20s
+	argocd-repo-server-c449d6756-zv2lx              20s
+	argocd-server-647f8f6499-8bct4                  20s
+
+	==> v1/Role
+	NAME                           AGE
+	argocd-application-controller  12d
+	argocd-dex-server              12d
+	argocd-server                  12d
+
+	==> v1/RoleBinding
+	NAME                           AGE
+	argocd-application-controller  12d
+	argocd-dex-server              12d
+	argocd-server                  12d
+
+	==> v1/Secret
+	NAME           AGE
+	argocd-secret  12d
+
+	==> v1/Service
+	NAME                           AGE
+	argocd-application-controller  5m2s
+	argocd-dex-server              5m2s
+	argocd-redis                   5m2s
+	argocd-repo-server             5m2s
+	argocd-server                  5m2s
+
+	==> v1/ServiceAccount
+	NAME                           AGE
+	argocd-application-controller  12d
+	argocd-dex-server              12d
+	argocd-server                  12d
+
+	==> v1beta1/Ingress
+	NAME           AGE
+	argocd-server  12d
+
+
+	NOTES:
+	In order to access the server UI you have the following options:
+
+	1. kubectl port-forward service/argocd-server -n argocd 8080:443
+
+	    and then open the browser on http://localhost:8080 and accept the certificate
+
+	2. enable ingress in the values file `service.ingress.enabled` and either
+	      - Add the annotation for ssl passthrough: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/ingress.md#option-1-ssl-passthrough
+	      - Add the `--insecure` flag to `server.extraArgs` in the values file and terminate SSL at your ingress: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/ingress.md#option-2-multiple-ingress-objects-and-hosts
+
+
+	After reaching the UI the first time you can login with username: admin and the password will be the
+	name of the server pod. You can get the pod name by running:
+
+kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o name | cut -d'/' -f 2
+  > argocd-server-647f8f6499-8bct4
+
+
+kubectl create secret generic vault-secrets-operator \
+  --namespace vault-secrets-operator \
+  --from-literal=VAULT_TOKEN=root \
+  --from-literal=VAULT_TOKEN_LEASE_DURATION=31536000 \
+  --dry-run -o yaml | kubectl apply -f -
+
+>  secret/vault-secrets-operator configured
+
+
+ARGOCD_PASSWORD=`kubectl get pods \
+  --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}' \
+  --namespace argocd | grep argocd-server`
+
+argocd login \
+   --plaintext \
+   --port-forward \
+   --port-forward-namespace argocd \
+   --username admin \
+   --password ${ARGOCD_PASSWORD:/}
+
+> FATA[0000] rpc error: code = Unauthenticated desc = Invalid username or password 
+
+
+# Try with admin/pass as combination
+
+argocd login \
+  --plaintext \
+  --port-forward \
+  --port-forward-namespace argocd \
+  --username admin \
+  --password pass
+
+> 'admin' logged in successfully
+> Context 'port-forward' updated
+
+
+
+
+echo "Create vault secrets operator..."
+argocd app create vault-secrets-operator \
+  --repo https://github.com/lsst-sqre/lsp-deploy.git \
+  --path services/vault-secrets-operator \
+  --dest-namespace vault-secrets-operator \
+  --dest-server https://kubernetes.default.svc \
+  --upsert \
+  --port-forward \
+  --port-forward-namespace argocd
+
+> application 'vault-secrets-operator' created
+
+
+
+argocd app sync vault-secrets-operator \
+  --port-forward \
+  --port-forward-namespace argocd
+
+
+
+TIMESTAMP                  GROUP                            KIND                 NAMESPACE                              NAME          STATUS    HEALTH        HOOK  MESSAGE
+2020-11-11T14:03:18+00:00                              Namespace                                        vault-secrets-operator        Synced                        
+2020-11-11T14:03:18+00:00                                Service                vault-secrets-operator  vault-secrets-operator      OutOfSync  Missing              
+2020-11-11T14:03:18+00:00                             ServiceAccount            vault-secrets-operator  vault-secrets-operator        Synced                        
+2020-11-11T14:03:18+00:00  apiextensions.k8s.io       CustomResourceDefinition                          vaultsecrets.ricoberger.de    Synced                        
+2020-11-11T14:03:18+00:00   apps                      Deployment                vault-secrets-operator  vault-secrets-operator      OutOfSync  Missing              
+2020-11-11T14:03:18+00:00  rbac.authorization.k8s.io  ClusterRole                                       vault-secrets-operator        Synced                        
+2020-11-11T14:03:18+00:00  rbac.authorization.k8s.io  ClusterRoleBinding                                vault-secrets-operator        Synced                        
+2020-11-11T14:03:19+00:00            Service  vault-secrets-operator  vault-secrets-operator    Synced  Healthy              
+2020-11-11T14:03:19+00:00  rbac.authorization.k8s.io  ClusterRoleBinding        vault-secrets-operator  vault-secrets-operator       Running    Synced              clusterrolebinding.rbac.authorization.k8s.io/vault-secrets-operator reconciled. clusterrolebinding.rbac.authorization.k8s.io/vault-secrets-operator configured
+2020-11-11T14:03:19+00:00  apiextensions.k8s.io       CustomResourceDefinition  vault-secrets-operator  vaultsecrets.ricoberger.de   Running    Synced              customresourcedefinition.apiextensions.k8s.io/vaultsecrets.ricoberger.de unchanged
+2020-11-11T14:03:19+00:00  rbac.authorization.k8s.io  ClusterRole               vault-secrets-operator  vault-secrets-operator       Running    Synced              clusterrole.rbac.authorization.k8s.io/vault-secrets-operator reconciled. clusterrole.rbac.authorization.k8s.io/vault-secrets-operator unchanged
+2020-11-11T14:03:19+00:00                                Service                vault-secrets-operator  vault-secrets-operator        Synced   Healthy              service/vault-secrets-operator created
+2020-11-11T14:03:19+00:00   apps                      Deployment                vault-secrets-operator  vault-secrets-operator      OutOfSync  Missing              deployment.apps/vault-secrets-operator created
+2020-11-11T14:03:19+00:00                              Namespace                vault-secrets-operator  vault-secrets-operator       Running    Synced              namespace/vault-secrets-operator configured
+2020-11-11T14:03:19+00:00                             ServiceAccount            vault-secrets-operator  vault-secrets-operator        Synced                        serviceaccount/vault-secrets-operator unchanged
+2020-11-11T14:03:19+00:00   apps  Deployment  vault-secrets-operator  vault-secrets-operator    Synced  Progressing              deployment.apps/vault-secrets-operator created
+
+Name:               vault-secrets-operator
+Project:            default
+Server:             https://kubernetes.default.svc
+Namespace:          vault-secrets-operator
+URL:                http://127.0.0.1:42617/applications/vault-secrets-operator
+Repo:               https://github.com/lsst-sqre/lsp-deploy.git
+Target:             
+Path:               services/vault-secrets-operator
+SyncWindow:         Sync Allowed
+Sync Policy:        <none>
+Sync Status:        Synced to  (d3d31cf)
+Health Status:      Progressing
+
+Operation:          Sync
+Sync Revision:      d3d31cf448cbc739b8fab9002681339a4a359f0e
+Phase:              Succeeded
+Start:              2020-11-11 14:03:14 +0000 UTC
+Finished:           2020-11-11 14:03:19 +0000 UTC
+Duration:           5s
+Message:            successfully synced (all tasks run)
+
+GROUP                      KIND                      NAMESPACE               NAME                        STATUS   HEALTH       HOOK  MESSAGE
+                           Namespace                 vault-secrets-operator  vault-secrets-operator      Running  Synced             namespace/vault-secrets-operator configured
+                           ServiceAccount            vault-secrets-operator  vault-secrets-operator      Synced                      serviceaccount/vault-secrets-operator unchanged
+apiextensions.k8s.io       CustomResourceDefinition  vault-secrets-operator  vaultsecrets.ricoberger.de  Running  Synced             customresourcedefinition.apiextensions.k8s.io/vaultsecrets.ricoberger.de unchanged
+rbac.authorization.k8s.io  ClusterRole               vault-secrets-operator  vault-secrets-operator      Running  Synced             clusterrole.rbac.authorization.k8s.io/vault-secrets-operator reconciled. clusterrole.rbac.authorization.k8s.io/vault-secrets-operator unchanged
+rbac.authorization.k8s.io  ClusterRoleBinding        vault-secrets-operator  vault-secrets-operator      Running  Synced             clusterrolebinding.rbac.authorization.k8s.io/vault-secrets-operator reconciled. clusterrolebinding.rbac.authorization.k8s.io/vault-secrets-operator configured
+                           Service                   vault-secrets-operator  vault-secrets-operator      Synced   Healthy            service/vault-secrets-operator created
+apps                       Deployment                vault-secrets-operator  vault-secrets-operator      Synced   Progressing        deployment.apps/vault-secrets-operator created
+                           Namespace                                         vault-secrets-operator      Synced                      
+apiextensions.k8s.io       CustomResourceDefinition                          vaultsecrets.ricoberger.de  Synced                      
+rbac.authorization.k8s.io  ClusterRole                                       vault-secrets-operator      Synced                      
+rbac.authorization.k8s.io  ClusterRoleBinding                                vault-secrets-operator      Synced                      
+
+
+
+
+
+argocd app create science-platform \
+  --repo https://github.com/lsst-sqre/lsp-deploy.git \
+  --path science-platform --dest-namespace default \
+  --dest-server https://kubernetes.default.svc \
+  --upsert \
+  --revision master \
+  --port-forward \
+  --port-forward-namespace argocd \
+  --values values-base.yaml
+
+> application 'science-platform' created
+
+
+
+# Not working.. Secrets operator is trying to access http://vault.lsst.codes..
+# Try again with (stvoutsin) forked repository where we hard code vault to the internal IP of Vault
+# -------------------------
+
+
+
+echo "Create vault secrets operator..."
+argocd app create vault-secrets-operator \
+  --repo https://github.com/stvoutsin/lsp-deploy.git \
+  --path services/vault-secrets-operator \
+  --dest-namespace vault-secrets-operator \
+  --dest-server https://kubernetes.default.svc \
+  --upsert \
+  --port-forward \
+  --port-forward-namespace argocd
+
+> application 'vault-secrets-operator' created
+
+
+
+argocd app sync vault-secrets-operator \
+  --port-forward \
+  --port-forward-namespace argocd
+
+
+argocd app create science-platform \
+  --repo https://github.com/stvoutsin/lsp-deploy.git \
+  --path science-platform --dest-namespace default \
+  --dest-server https://kubernetes.default.svc \
+  --upsert \
+  --revision master \
+  --port-forward \
+  --port-forward-namespace argocd \
+  --values values-base.yaml
+
+
+# Lots of errors..
+
+
+
+# Links
+# -----------------------
+
+# https://deeptiman.medium.com/secrets-in-kubernetes-and-hashicorp-vault-d04d83d0400b
+# https://github.com/lsst-sqre/lsp-deploy/blob/master/installer/install.sh
+
+
+
+
+
+
+
+
