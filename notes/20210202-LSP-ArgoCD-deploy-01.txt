@@ -119,6 +119,6 @@ https://rspdev.ddns.net/
 https://rspdev.ddns.net/argo-cd
 
 
-# Landing page works, but most services are failing because they cannot find a secrets file
+# Landing page works, but Portal & JupyterHub produce errors when trying to access them
 
 
