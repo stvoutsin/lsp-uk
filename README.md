@@ -1,9 +1,6 @@
-<<<<<<< HEAD
-# LSP-uk
-=======
-# rsp-uk
->>>>>>> upstream/master
-LSST-UK Science platform based on the LSP (by LSST SQuaRE)
+# RSP-uk
+
+Rubin-UK Science platform based on the RSP (by Rubin Obs. SQuaRE team)
 
 
 # IMPORTANT: 
