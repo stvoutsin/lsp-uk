@@ -1,0 +1,315 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2019, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+########################################################
+##    LSP (with Rancher/Kubernetes) on Openstack      ##
+########################################################
+
+
+
+
+
+#--------------------------------------#
+#   Openstack & Kubernetes Setup       #
+#--------------------------------------#
+
+
+
+# Setup Openstack nodes
+#----------------------
+
+# Setup 2 Master nodes, 2 Worker nodes, 1 Admin node & 1 Gateway node
+# At least 2 Cores, at least 6 GB RAM on each node
+
+# For this version I am using the "ubuntu-bionic-server" image for the worker & master nodes
+
+
+
+# Setup ssh config
+# Setup ssh entries in local config to allow access to each worker and master node through the gateway node
+------------------
+
+..
+
+Host lsp-node-1
+    User ubuntu
+    IdentityFile ..
+    Hostname 192.168.0.x
+    ProxyCommand ssh -W %h:%p lsp-gateway
+
+..
+
+
+
+# [All Nodes]
+# Install Docker on all nodes
+-----------------------------
+
+sudo apt-get -y update
+sudo apt-get -y install docker.io
+
+
+
+# [Admin node] Deploy Rancher on Admin Node
+#---------------------------------------------------------
+
+# Install Rancher. Documentation is at https://rancher.com/docs/rancher/v2.x/en/
+sudo docker run -d --restart=unless-stopped -p 80:80 -p 443:443  rancher/rancher:latest
+
+
+
+
+# [Admin node] Create K8s Cluster in Rancher
+#---------------------------------------------------------
+
+# Setup a Public IP for Rancher, and configure new cluster in GUI
+
+# To create a new cluster in Rancher:
+# Add Cluster - Select Cluster Type - From existing nodes (Custom)
+
+
+# Use following config for cluster creation:
+
+https://github.com/stvoutsin/lsp-uk/blob/master/rancher/kubernetes-cluster.yaml
+
+
+
+# Once created, copy and run join command on each node of cluster
+# For workers only check the "worker" option
+# Master node should have all 3 options checked (etcd, worker, ..)
+
+
+# Note: When setting up, if the Openstack cloud provider configuration is not saved when first creating, you may need to add it with an update after the cluster is configured
+
+
+
+# [Master Nodes]
+#---------------------------------------------------------
+
+sudo docker run -d --privileged --restart=unless-stopped --net=host -v /etc/kubernetes:/etc/kubernetes -v /var/run:/var/run rancher/rancher-agent:v2.3.5 --server https://host --token  --ca-checksum  --etcd --controlplane --worker
+
+
+
+# [Worker Nodes]
+#---------------------------------------------------------
+
+sudo docker run -d --privileged --restart=unless-stopped --net=host -v /etc/kubernetes:/etc/kubernetes -v /var/run:/var/run rancher/rancher-agent:v2.3.5 --server https://host --token  --ca-checksum  --worker
+
+
+
+# [Admin Node] Setup kubectl
+#---------------------------------------------------------
+
+# Install kubectl
+
+curl -LO https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl
+sudo chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin/kubectl
+
+# Copy kubectl config from Rancher GUI, into ~/.kube/config
+
+
+
+# [Admin Node]  Deploy Kubernetes Dashboard
+#---------------------------------------------------------
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta6/aio/deploy/recommended.yaml
+
+cat > "${HOME}/dashboard-adminuser.yaml" << EOF
+
+	apiVersion: rbac.authorization.k8s.io/v1
+	kind: ClusterRoleBinding
+	metadata:
+	  name: admin-user
+	roleRef:
+	  apiGroup: rbac.authorization.k8s.io
+	  kind: ClusterRole
+	  name: cluster-admin
+	subjects:
+	- kind: ServiceAccount
+	  name: admin-user
+	  namespace: kubernetes-dashboard
+
+EOF
+
+
+kubectl apply -f dashboard-adminuser.yaml
+kubectl -n kube-system describe secret
+
+## Copy tiller account secret and use as token for the GUI
+
+RANCHER_IP=
+CLUSTER_ID=
+
+
+
+# [Local Machine] Kubernetes Dashboard Web GUI 
+#---------------------------------------------------------
+
+# Rancher K8s Dashboard UI can be found at: 
+
+   https://${RANCHER_IP}/k8s/clusters/${CLUSTER_ID}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login
+
+
+
+
+
+
+#--------------------------------------#
+#   Install LSP Components             #
+#--------------------------------------#
+
+
+
+# [Admin Node]  Fetch LSP create scripts
+#---------------------------------------------------------
+
+git clone https://github.com/stvoutsin/lsp-uk
+cd lsp-uk
+
+
+# [Admin Node] Set nublado configuration variables (OAuth)
+#---------------------------------------------------------
+pushd scripts/
+    nano nublado-values.yaml
+        ..
+        fqdn: '192.41.108.30'
+        oauth_client_id: '${github_client_id}'
+	      oauth_secret: '${github_secret}'
+        ..
+popd
+
+
+
+# [Admin Node] Install tiller account & Certs
+#---------------------------------------------------------
+
+## Create Certificates 
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/apache-selfsigned.key -out /etc/ssl/certs/apache-selfsigned.crt
+sudo scp -r /etc/ssl/private/ . 
+sudo scp -r /etc/ssl/certs/apache-selfsigned.crt private/ 
+sudo chown ubuntu:root private/
+
+kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+helm init --service-account tiller --override spec.selector.matchLabels.'name'='tiller',spec.selector.matchLabels.'app'='helm' --output yaml | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@' | kubectl apply  -f -
+
+
+
+
+# [Admin Node] Install LSP Helm charts 
+#---------------------------------------------------------
+
+pushd scripts/
+ 
+   ## Install Tiller (If previous install of tiller didn't work, try this)
+   # sudo ./install_tiller.sh
+
+   ## Install ingress
+   sudo ./install_ingress.sh /etc/ssl/certs/apache-selfsigned.crt /etc/ssl/private/apache-selfsigned.key 
+
+   ## Set Public IP
+   sudo ./public_ip.sh
+
+      > Retrieving public IP of your LSST Science Platform...
+	Error from server (NotFound): namespaces "nginx" not found
+
+   # This doesn't seem to work, but services can be spawned without it
+
+
+   ## Installing Fileserver
+   helm install ../helm/charts/fileserver/ --name fileserver --namespace fileserver 
+
+   ## Installing Landing Page
+   helm install ../helm/charts/landing-page --name landing-page --namespace landing-page
+
+   ## Installing CADC TAP service
+   helm install ../helm/charts/cadc-tap --name tap --namespace tap
+
+   ## Installing Firefly
+   helm install ../helm/charts/firefly --name firefly --namespace firefly
+
+
+   ## Installing Nublado
+   
+   ## To install Nublado, I had to change the values configuration, to change:
+       - The mountpoints for the NFS server.
+            Point this to the IP address of the NFS Service
+       
+ 
+   nano ../helm/charts/nublado/values.yaml
+
+   ..
+
+	   mountpoints: |
+	  [
+	    {
+	      "mountpoint": "/home",
+	      "mode": "rw",
+	      "fileserver-export": "/home",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/datasets",
+	      "fileserver-export": "/datasets",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/software",
+	      "fileserver-export": "/software",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/project",
+	      "mode": "rw",
+	      "fileserver-export": "/project",
+	      "fileserver-host": "10.43.213.26"
+	    },
+	    {
+	      "mountpoint": "/scratch",
+	      "mode": "rw",
+	      "fileserver-export": "/scratch",
+	      "fileserver-host": "10.43.213.26"
+	    }
+	  ]
+
+    ..
+
+
+
+   ## Installing Nublado
+   helm install ../helm/charts/nublado --name nublado --namespace nublado --values nublado-values.yaml
+
+
+
+#----------------------------------------------#
+#   Configure Reverse Proxy Server             #
+#----------------------------------------------#
+
+For notes on setting up a Reverse proxy to the services with Apache, see here:
+
+  https://github.com/lsst-uk/lsp-uk/blob/master/notes/20200130-Apache-Proxy.txt
+
+Note: This creates some extra paths because of how the components are hard wired to point to services with standard path (i.e. firefly == portal/suit/), that need to eventually be merged into a single one 
+
+
+With the latest version, we've deployed with HTTPS, which changes what the above configuration looks like. 
+Notes on that not yet pushed

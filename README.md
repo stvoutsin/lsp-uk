@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # LSP-uk
+=======
+# rsp-uk
+>>>>>>> upstream/master
 LSST-UK Science platform based on the LSP (by LSST SQuaRE)
 
 
