@@ -1,0 +1,124 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2020, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+# Create Openstack  & Kubernetes Cluster
+# --------------------------------------
+
+# https://github.com/stvoutsin/lsp-uk/blob/master/notes/20200416-LSP-Openstack-Edinburgh.txt
+
+
+# The following assumes we have already setup the Admin node running rancher and kubectl
+
+
+# Clone Rubin Deploy Scripts
+# user@lsp-admin
+# ---------------------------
+
+
+pushd ${HOME:?}
+
+   git clone https://github.com/stvoutsin/lsp-deploy
+   pushd lsp-deploy/installer
+
+
+
+# Create Dashboard for K8s
+# user@lsp-admin
+# -------------------------
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta6/aio/deploy/recommended.yaml
+
+
+
+# Setup tiller account
+
+kubectl -n kube-system create serviceaccount tiller
+kubectl create clusterrolebinding tiller   --clusterrole=cluster-admin   --serviceaccount=kube-system:tiller
+
+
+# Get tiller token
+kubectl -n kube-system describe secret
+
+
+
+# Access Kubernetes Dashboard page
+https://192.41.108.35/k8s/clusters/c-bwrlp/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/overview?namespace=default
+
+
+
+# Create Storage Class
+# ------------------------------------------------
+
+
+cat > "storageclass.yml" << EOF
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: kubernetes.io/cinder
+parameters:
+  availability: nova
+EOF
+
+kubectl create -f storageclass.yml
+
+
+# Edit Installer to manually add the environment values specific to ROE
+# ----------------------------------------------------------------------
+
+
+nano ./install.sh
+
+
+#!/bin/bash -ex
+ENVIRONMENT=roe
+VAULT_TOKEN=
+HOSTNAME=rspdev.ddns.net
+REVISION=HEAD
+GIT_URL=https://github.com/stvoutsin/lsp-deploy.git
+
+
+
+# Run Installer 
+# ----------------------------------------------------------------------
+
+./install.sh
+
+# SUCCESS
+
+
+
+
+# Access Landing page
+https://rspdev.ddns.net/
+
+
+# Access Argo-CD
+https://rspdev.ddns.net/argo-cd
+
+
+# Landing page works, but Portal & JupyterHub produce errors when trying to access them
+
+
