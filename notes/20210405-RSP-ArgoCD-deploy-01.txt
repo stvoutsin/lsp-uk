@@ -1,0 +1,201 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2021, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+# --------------------------------------
+# Create Openstack  & Kubernetes Cluster
+# --------------------------------------
+
+In Openstack, create 1 admin node, 1 master node & N worker nodes, using Openstack UI or a CLI like Magnum
+
+# Please note: Security groups for opening ports not included in these instructions, but Kubernetes expect certain ports open for Master & Worker nodes
+# Todo: include security group info here:
+
+
+For creating the Kuberenetes Cluster we use Rancher
+# https://rancher.com/
+
+Follow instructions in file below from line #23 to #102:
+Rancher will provide the Docker run commands that will have to be run on each node, so those should not be copy/pasted from notes
+https://github.com/stvoutsin/lsp-uk/blob/master/notes/20200416-LSP-Openstack-Edinburgh.txt
+
+
+# ----------------------------------------------------
+# Create Github Organization OAuth Application & Team
+# ----------------------------------------------------
+
+# See: https://github.com/organizations/LSP-UK
+
+
+# ----------------------------------------------------
+# Create SSL Certificate
+# ----------------------------------------------------
+
+# For this deploy we use the University certficate
+# The generate secrets script below expects the private key & the full chain cert
+# For the full chain cert, we can copy the certificate we get into
+# https://docs.paloaltonetworks.com/cortex/cortex-xsoar/6-0/cortex-xsoar-admin/mobile-app/mobile-app-overview/android-requirements/get-the-full-certificate-chain-for-a-certificate.html
+
+
+
+# ---------------------------
+# Clone Rubin Deploy Scripts
+# user@rsp-dev-admin
+# ---------------------------
+
+
+pushd ${HOME:?}
+
+   git clone https://github.com/stvoutsin/lsp-deploy
+
+   pushd lsp-deploy/installer
+
+
+
+# --------------------------------------------------
+# Create Storage Class
+# user@rsp-dev-admin
+# --------------------------------------------------
+
+
+cat > "storageclass.yml" << EOF
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: kubernetes.io/cinder
+parameters:
+  availability: nova
+EOF
+
+kubectl create -f storageclass.yml
+
+
+
+# --------------------------------------------------
+# Generate Secrets (Optional)
+# user@rsp-dev-admin
+# --------------------------------------------------
+
+export VAULT_ADDR=https://vault.lsst.codes
+export VAULT_TOKEN= # Vault write token ....
+export VAULT_ENV=roe
+
+
+python3 generate_secrets.py
+
+	Loading secrets/portal
+	Loading secrets/ingress-nginx
+	Loading secrets/installer
+	Loading secrets/tap
+	Loading secrets/nublado
+	Loading secrets/gafaelfawr
+	Loading secrets/argocd
+	Loading secrets/postgres
+	Loading secrets/nublado2
+	Loading secrets/pull-secret
+	Loading secrets/mobu
+	Loading secrets/log
+	Loading secrets/cert-manager
+	[pull-secret .dockerconfigjson] (.docker/config.json to pull images)
+	Current contents:
+	{
+		"auths": {
+		        "hub.docker.com": {
+		                "username" : "",
+		                "password" : "",
+		                "auth": "=="
+		        }
+		}
+	}
+
+	New filename with contents (empty to not change): 
+
+
+	[tap slack_webhook_url] (slack webhook url for querymonkey): [current: ] [tap google_creds.json] (file containing google service account credentials)
+	Current contents:
+
+	New filename with contents (empty to not change): [mobu ALERT_HOOK] (Slack webhook for reporting mobu alerts.  Or use None for no alerting.): [current: None] 
+	[gafaelfawr auth_type] (Use cilogon or github?): [current: github] 
+	[gafaelfawr github-client-secret] (GitHub client secret): [current: ] 
+	[installer argocd.admin.plaintext_password] (Admin password for ArgoCD?): [current: ] 
+	[argocd dex.clientSecret] (OAuth client secret for ArgoCD (either GitHub or Google)?): [current: ] 
+	[cert-manager enabled] (Use cert-manager? (y/n):): [current: n] 
+	[ingress-nginx tls.key] (Certificate private key)
+	Current contents:
+	-----BEGIN RSA PRIVATE KEY-----
+
+
+	.....
+
+	-----END RSA PRIVATE KEY-----
+
+	New filename with contents (empty to not change): 
+	[ingress-nginx tls.crt] (Certificate chain)
+	Current contents:
+	-----BEGIN CERTIFICATE-----
+
+	-----END CERTIFICATE-----
+
+	New filename with contents (empty to not change): 
+
+
+
+
+
+# --------------------------------------------------
+# Push Secrets (Optional)
+# user@rsp-dev-admin
+# --------------------------------------------------
+
+./write_secrets.sh $VAULT_ENV
+
+
+
+# --------------------------------------------------------------------------------
+# Edit Installer to manually (Optional)
+# We have to do this because the git command --show-current fails on our system
+# user@rsp-dev-admin
+# --------------------------------------------------------------------------------
+
+
+# Edit install.sh:
+
+ENVIRONMENT=roe
+export VAULT_ADDR=https://vault.lsst.codes
+export VAULT_TOKEN=..
+GIT_URL=`git config --get remote.origin.url`
+GIT_BRANCH=${GITHUB_HEAD_REF:-`git name-rev --name-only HEAD`}
+VAULT_PATH_PREFIX=roe
+
+
+
+# Run Installer 
+# ----------------------------------------------------------------------
+
+./install.sh 
+
+
+# Access Landing page
+# For the roe dev env: https://rsp.lsst.ac.uk
