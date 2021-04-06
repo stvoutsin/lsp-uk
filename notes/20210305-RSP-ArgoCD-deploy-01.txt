@@ -1,0 +1,231 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2021, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#  
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+#
+
+
+# --------------------------------------
+# Create Openstack  & Kubernetes Cluster
+# --------------------------------------
+
+In Openstack, create 1 admin node, 1 master node & N worker nodes, using Openstack UI or a CLI like Magnum
+
+# Please note: Security groups for opening ports not included in these instructions, but Kubernetes expect certain ports open for Master & Worker nodes
+# Todo: include security group info here:
+
+
+For creating the Kuberenetes Cluster we use Rancher
+# https://rancher.com/
+
+Follow instructions in file below from line #23 to #102:
+Rancher will provide the Docker run commands that will have to be run on each node, so those should not be copy/pasted from notes
+https://github.com/stvoutsin/lsp-uk/blob/master/notes/20200416-LSP-Openstack-Edinburgh.txt
+
+
+# ---------------------------
+# Clone Rubin Deploy Scripts
+# user@rsp-dev-admin
+# ---------------------------
+
+
+pushd ${HOME:?}
+
+   git clone https://github.com/stvoutsin/lsp-deploy
+
+   pushd lsp-deploy/installer
+
+
+# --------------------------------------------------
+# Create Dashboard for K8s  (Optional)
+# user@rsp-dev-admin
+# --------------------------------------------------
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta6/aio/deploy/recommended.yaml
+
+
+# --------------------------------------------------
+# Setup tiller account  (Optional)
+# user@rsp-dev-admin
+# --------------------------------------------------
+
+kubectl -n kube-system create serviceaccount tiller
+kubectl create clusterrolebinding tiller   --clusterrole=cluster-admin   --serviceaccount=kube-system:tiller
+
+
+# --------------------------------------------------
+# Get tiller token. We can use this to login to the dashboard (Optional)
+# Look for the entry for the "tiller" account
+# user@rsp-dev-admin
+# --------------------------------------------------
+
+kubectl -n kube-system describe secret
+
+# Access Kubernetes Dashboard page
+# RANCHER_IP - Rancher IP address
+# CLUSTER_ID - Cluster ID
+
+https://${RANCHER_IP:?}/k8s/clusters/${CLUSTER_ID}/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/overview?namespace=default
+
+
+
+# --------------------------------------------------
+# Create Storage Class
+# user@rsp-dev-admin
+# --------------------------------------------------
+
+
+cat > "storageclass.yml" << EOF
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: kubernetes.io/cinder
+parameters:
+  availability: nova
+EOF
+
+kubectl create -f storageclass.yml
+
+
+
+# --------------------------------------------------
+# Generate Secrets (Optional)
+# user@rsp-dev-admin
+# --------------------------------------------------
+
+python3 generate_secrets.py
+
+# Below is a brief description of the inputs we use for this
+
+
+[[global] .docker/config.json] (file containing docker credentials to pull images):  
+# Use a Docker configuration file for this.
+# Format can look somethings like this:
+
+	{
+		"auths": {
+		        "hub.docker.com": {
+		                "username" : "",
+		                "password" : "",
+		                "auth": ""
+		        }
+		}
+	}
+
+
+[TAP google_creds.json] (file containing google service account credentials): 
+# Create an empty file, and pass the path to it here
+
+
+[TAP slack_webhook_url] (slack webhook url for querymonkey): 
+# Leave empty
+
+
+[mobu ALERT_HOOK] (Slack webhook for reporting mobu alerts.  Or use None for no alerting.): 
+# Enter "None" as the value here
+
+
+[gafaelfawr authentication provider] (Auth provider ('cilogon' or 'github')): 
+# github
+
+
+[gafaelfawr github-client-secret] (GitHub client secret): 
+# Create a key in the Organization OAuth settings page and use this
+
+
+Use certificate file? (y/n): 
+# n
+
+
+[cert-manager aws-secret-access-key] (AWS secret access key for zone for DNS cert solver.): 
+# AKIAQSJOS2SFLUEVXZDB
+
+# Note: not sure if this AWS secret is the correct value to use here
+
+
+
+# We also manually edit secrets as follows:
+# This is a temporary workaround to solve issues with random generated passwords for Firefly (Portal)
+
+
+# Create secret for Portal
+
+cat > "secrets/portal" << EOF
+{"redis-password": "MYPASS", "ADMIN_PASSWORD" : "MYPASS" }
+EOF
+
+
+
+# Add lab_repo_password in nublado
+
+nano secrets/nublado..
+
+  ..... "lab_repo_password" : "DOCKER_HUB_PASS"}
+
+
+
+
+# --------------------------------------------------
+# Push Secrets (Optional)
+# user@rsp-dev-admin
+# --------------------------------------------------
+export VAULT_TOKEN=
+export VAULT_ADDR='https://vault.lsst.codes' 
+export VAULT_ENV=roe
+# Replace roe with your env
+
+./push_secrets.sh $VAULT_ENV
+
+
+
+# --------------------------------------------------------------------------------
+# Edit Installer to manually (Optional)
+# We have to do this because the git command --show-current fails on our system
+# user@rsp-dev-admin
+# --------------------------------------------------------------------------------
+
+
+# Editinstall.sh:
+
+# Change this:
+GIT_BRANCH=${GITHUB_HEAD_REF:-`git branch --show-current`}
+
+# to:
+GIT_BRANCH=${GITHUB_HEAD_REF:-`git name-rev --name-only HEAD`}
+
+
+
+# Run Installer 
+# ----------------------------------------------------------------------
+
+./install.sh ${VAULT_ENV:?} ${VAULT_TOKEN:?}
+
+
+
+# Access Landing page
+# For the roe dev env: https://rspdev.ddns.net/
+
+
+# Access Argo-CD
+# For the roe dev env: https://rspdev.ddns.net/argo-cd
+
+
