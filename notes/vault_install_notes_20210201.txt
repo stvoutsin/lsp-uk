@@ -1,0 +1,126 @@
+1) Install vault on a suitable server - see https://learn.hashicorp.com/tutorials/vault/getting-started-install
+
+ubuntu@vault:~$ curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+ubuntu@vault:~$ sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+ubuntu@vault:~$ sudo apt-get update && sudo apt-get install vault
+ubuntu@vault:~$ cat config.hcl 
+storage "raft" {
+  path    = "./vault/data"
+  node_id = "node1"
+}
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  tls_disable = 1
+}
+api_addr = "http://10.0.0.209:8200"
+cluster_addr = "https://10.0.0.209:8201"
+ubuntu@vault:~$ mkdir -p vault/data
+ubuntu@vault:~$ vault server -config=config.hcl > vault.log &
+ubuntu@vault:~$ export VAULT_ADDR='http://10.0.0.209:8200'
+ubuntu@vault:~$ vault status
+Key                Value
+---                -----
+Seal Type          shamir
+Initialized        false
+Sealed             true
+Total Shares       0
+Threshold          0
+Unseal Progress    0/0
+Unseal Nonce       n/a
+Version            1.6.1
+Storage Type       raft
+HA Enabled         true
+ubuntu@vault:~$ vault operator init
+ubuntu@vault:~$ vault operator unseal
+ubuntu@vault:~$ vault operator unseal
+ubuntu@vault:~$ vault operator unseal
+ubuntu@vault:~$ vault status
+Key                     Value
+---                     -----
+Seal Type               shamir
+Initialized             true
+Sealed                  false
+Total Shares            5
+Threshold               3
+Version                 1.6.1
+Storage Type            raft
+Cluster Name            vault-cluster-f754b92d
+Cluster ID              92869b07-a68f-0826-1fbb-3cde8ca86801
+HA Enabled              true
+HA Cluster              n/a
+HA Mode                 standby
+Active Node Address     <none>
+Raft Committed Index    24
+Raft Applied Index      24
+ubuntu@vault:~$ vault login <Initial_Root_Token>
+
+2) Vault-secrets-operator install: https://github.com/ricoberger/vault-secrets-operator. This is now done automatically as part of the argoCD install.
+
+ubuntu@vault:~$ vault secrets enable -path=kvv2 -version=2 kv
+Success! Enabled the kv secrets engine at: kvv2/
+ubuntu@vault:~$ vault secrets list
+Path          Type         Accessor              Description
+----          ----         --------              -----------
+cubbyhole/    cubbyhole    cubbyhole_da5bada6    per-token private secret storage
+identity/     identity     identity_69563f19     identity store
+kvv2/         kv           kv_fb73c893           n/a
+sys/          system       system_fe61ad50       system endpoints used for control, policy and debugging
+ubuntu@vault:~$ cat vault-secrets-operator.policy 
+path "kvv2/data/*" {
+  capabilities = ["read"]
+}
+ubuntu@vault:~$ vault policy write vault-secrets-operator vault-secrets-operator.policy 
+Success! Uploaded policy: vault-secrets-operator
+
+gfrancis@rsp:~$ helm repo add ricoberger https://ricoberger.github.io/helm-charts
+"ricoberger" has been added to your repositories
+gfrancis@rsp:~$ helm repo update
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "ricoberger" chart repository
+Update Complete. ⎈Happy Helming!⎈
+gfrancis@rsp:~$ cat vault-secrets-operator.yaml 
+vault:
+  authMethod: kubernetes
+gfrancis@rsp:~$ helm upgrade --install vault-secrets-operator ricoberger/vault-secrets-operator --values=vault-secrets-operator.yaml
+Release "vault-secrets-operator" does not exist. Installing it now.
+NAME: vault-secrets-operator
+LAST DEPLOYED: Tue Jan 26 18:56:58 2021
+NAMESPACE: default
+STATUS: deployed
+REVISION: 2
+NOTES:
+1. Get the application URL by running these commands:
+
+  export POD_NAME=$(kubectl get pods --namespace default -l "app.kubernetes.io/name=vault-secrets-operator,app.kubernetes.io/instance=vault-secrets-operator" -o jsonpath="{.items[0].metadata.name}")
+  echo "Visit http://127.0.0.1:8686 to use your application"
+  kubectl port-forward $POD_NAME 8686
+
+
+2. Configure Vault using the "vault-secrets-operator" ServiceAccount.
+ubuntu@vault:~$ vault login
+ubuntu@vault:~$ vault auth enable kubernetes
+Success! Enabled kubernetes auth method at: kubernetes/
+
+gfrancis@rsp:~$ export VAULT_SECRETS_OPERATOR_NAMESPACE=$(kubectl get sa vault-secrets-operator -o jsonpath="{.metadata.namespace}")
+gfrancis@rsp:~$ export VAULT_SECRET_NAME=$(kubectl get sa vault-secrets-operator -o jsonpath="{.secrets[*]['name']}")
+gfrancis@rsp:~$ export SA_JWT_TOKEN=$(kubectl get secret $VAULT_SECRET_NAME -o jsonpath="{.data.token}" | base64 --decode; echo)
+gfrancis@rsp:~$ export SA_CA_CRT=$(kubectl get secret $VAULT_SECRET_NAME -o jsonpath="{.data['ca\.crt']}" | base64 --decode; echo)
+gfrancis@rsp:~$ export K8S_HOST=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+gfrancis@rsp:~$ env | grep -E 'VAULT_SECRETS_OPERATOR_NAMESPACE|VAULT_SECRET_NAME|SA_JWT_TOKEN|SA_CA_CRT|K8S_HOST'
+SA_CA_CRT=-----BEGIN CERTIFICATE-----
+VAULT_SECRET_NAME=vault-secrets-operator-token-8ksns
+VAULT_SECRETS_OPERATOR_NAMESPACE=default
+K8S_HOST=https://192.168.140.209:6443
+SA_JWT_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImtDV1Q3cFNKVkJhd2VyLU9LNUNERWVVV1I2cGZhUUhrb2pjY2J4ZkJuTmcifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50
+gfrancis@rsp:~$ vault write auth/kubernetes/config \
+>   token_reviewer_jwt="$SA_JWT_TOKEN" \
+>   kubernetes_host="$K8S_HOST" \
+>   kubernetes_ca_cert="$SA_CA_CRT"
+Success! Data written to: auth/kubernetes/config
+gfrancis@rsp:~$ vault write auth/kubernetes/role/vault-secrets-operator \
+>   bound_service_account_names="vault-secrets-operator" \
+>   bound_service_account_namespaces="$VAULT_SECRETS_OPERATOR_NAMESPACE" \
+>   policies=vault-secrets-operator \
+>   ttl=24h
+Success! Data written to: auth/kubernetes/role/vault-secrets-operator
+
