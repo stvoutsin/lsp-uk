@@ -1,0 +1,110 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2021, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+
+
+# List of Pre-existing notebooks in Nublado and status (pass/fail) after running them
+
+
+# In Nublado navigate to:
+   
+  /notebooks/notebook-demo/
+
+
+
+# Run all Notebooks
+# -----------------------------
+
+
+
+2017_tutorial.ipynb [Fail]
+
+# Error:
+  FileNotFoundError: [Errno 2] No such file or directory: '/project/shared/data/RSP_CHECK_REPO/butler.yaml'
+
+
+
+
+cluster.ipynb [Fail]
+
+# Error:
+  OSError: /project/shared/data/rsp_check_data/sdss/cluster.csv not found.
+
+
+
+
+DC2_catalog_access.ipynb [Fail]
+
+# Error:
+  DALServiceError: No working capabilities endpoint provided
+
+
+
+
+Firefly.ipynb [Fail]
+
+# Error:
+  FileNotFoundError: [Errno 2] No such file or directory: '/project/shared/data/RSP_CHECK_REPO/butler.yaml'
+
+
+
+
+star_galaxy.ipynb [Fail]
+
+# Error:
+  FileNotFoundError: [Errno 2] No such file or directory: '/project/shared/data/RSP_CHECK_REPO/butler.yaml'
+
+
+
+
+token-info.ipynb [	]
+
+
+
+
+gaia_al_sky.ipynb [Fail]
+
+# Error:
+  FileNotFoundError: [Errno 2] No such file or directory: '/home/stvoutsin/dask/dask_worker.yml'
+
+
+
+
+
+rv_gaia.ipynb [Fail]
+
+# Error:
+
+---------------------------------------------------------------------------
+FileNotFoundError                         Traceback (most recent call last)
+<ipython-input-8-8d3d2f738f56> in <module>
+      2     # Use the big dataset if it exists
+----> 3     df = dd.read_parquet('/project/shared/data/gaia_dr2/gaia_source_with_rv.parquet', columns=['l', 'b', 'radial_velocity'], engine='fastparquet')
+      4     #if reading from the cloud storage bucket, use the following instead
+
+
+
+FileNotFoundError                         Traceback (most recent call last)
+<ipython-input-8-8d3d2f738f56> in <module>
+      6 except FileNotFoundError:
+      7     # These data should exist everywhere
+----> 8     df = dd.read_parquet('/project/shared/data/rsp_check_data/parquet/gaia_source_with_rv.parquet', columns=['l', 'b', 'radial_velocity'], engine='fastparquet')
+
+

@@ -1,0 +1,83 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2021, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+
+
+
+# Create new node on Openstack
+# lasair-head
+  + 100 GB Volume
+# Add security group with port 2049 open
+
+
+# Instructions to setup nfs server on new node
+https://www.tecmint.com/install-nfs-server-on-ubuntu/
+
+
+# Create the folders
+sudo mkdir -p /data
+sudo mkdir -p /jhome
+
+
+
+# Set Permissions
+sudo chown -R nobody:nogroup /data
+sudo chown -R nobody:nogroup /jhome
+sudo chmod 777 /data
+sudo chmod 777 /jhome
+
+
+
+nano /etc/exports
+  ... 
+
+# /etc/exports: the access control list for filesystems which may be exported
+#		to NFS clients.  See exports(5).
+#
+# Example for NFSv2 and NFSv3:
+# /srv/homes       hostname1(rw,sync,no_subtree_check) hostname2(ro,sync,no_subtree_check)
+#
+# Example for NFSv4:
+# /srv/nfs4        gss/krb5i(rw,sync,fsid=0,crossmnt,no_subtree_check)
+# /srv/nfs4/homes  gss/krb5i(rw,sync,no_subtree_check)
+#
+
+
+/data   *(rw,no_root_squash,insecure)
+/jhome  *(rw,no_root_squash,insecure)
+
+
+  ...
+
+
+# Or try dboutigny's config
+
+/data  *(rw,all_squash,anonuid=1000,anongid=1000,sync,no_subtree_check)
+/jhome  *(rw,all_squash,anonuid=1000,anongid=1000,sync,no_subtree_check)
+
+
+
+
+# Export and restart
+sudo exportfs -a
+sudo systemctl restart nfs-kernel-server
+
+
+
