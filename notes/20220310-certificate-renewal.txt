@@ -1,0 +1,113 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2022, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+
+# The following describes the process followed in order to update the expiring certificate for the RSP
+# Unfortunately not automated, and contains mostly manual actions.
+
+
+# Generating a new certificate
+# -----------------------------------------------
+
+# Email from the JISC team after question on Certificate renewal
+
+"""
+Hi Stelios
+
+You can submit your certificate request through our portal:
+
+Https://ca.is.ed.ac.uk/
+
+Or you can speak to your own SoPA Helpdesk, as I think some of them are set up as users on the JISC service.
+
+"""
+
+# After filling out the certificate request through the portal for the domain: rsp.lsst.ac.uk, I got an automated message containing the certificate:
+
+
+Certificate Details:
+    Common Name :  rsp.lsst.ac.uk
+    Subject Alternative Names : rsp.lsst.ac.uk
+    SSL Certificate Profile :     Jisc OV Multi-Domain SSL
+    Term :         1 Year(s)
+    Server :      
+    Requested :    23/02/2022 15:14 GMT
+    Approved :     23/02/2022 15:14 GMT
+    Expires :      23/02/2023 23:59 GMT
+    Order Number : 806123165
+    Self-Enrollment Certificate ID : 3239068
+    Comments :    
+
+
+Available formats:
+
+       as Certificate only, PEM encoded 
+       as Certificate (w/ issuer after)
+       as Certificate (w/ chain)
+       as PKCS#7
+       as PKCS#7
+
+    Issuing CA certificates only:
+       as Root/Intermediate(s) only, PEM encoded
+       as Intermediate(s)/Root only, PEM encoded
+
+
+# Download a copy of the Certificate (w/ chain) to local machine
+
+
+
+# Get Chain certificate
+# -----------------------------------------------
+
+
+# Use service at https://whatsmychaincert.com/ to get a copy of the chain certificate.
+# Note that I tried all available formats of the certificate in the RSP, but it was only after running it through the tool that I got a version that worked.
+
+
+
+# Update the ingress-certificate Secret in Kubernetes
+# -----------------------------------------------------
+
+# Log into Rancher Dashboard and navigate to our cluster
+# Navigate to Storage / Secrets
+# {dashboardURL}/explorer/secret/ingress-nginx/ingress-certificate#data
+# Click "Edit Config" and paste the new Private key & Certificate
+
+
+# Restart ingress-nginx controller pod
+# -----------------------------------------------
+
+# Log into Rancher Dashboard and navigate to our cluster
+# Navigate to Workload / Pods / 
+# Under the Ingress-nginx namespace find ingress-nginx-controller pod, and Delete it
+# Kubernetes will then generate a new pod, containing the new certificate
+
+
+
+# Validate certificate
+# -------------------------------------------------
+
+# Navigate browser to https://rsp.lsst.ac.uk and check certificate
+
+...
+Issued On	Wednesday, February 23, 2022 at 2:00:00 AM
+Expires On	Friday, February 24, 2023 at 1:59:59 AM
+...
+
