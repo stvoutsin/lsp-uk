@@ -1,0 +1,73 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2022, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+
+# Notes on adding Databases to the RSP
+
+
+# ---------------------
+# Step 1:
+# ---------------------
+ 
+Manually create felis (yml) configuration files for the catalogue metadata that we want to add
+
+# https://github.com/lsst/sdm_schemas
+
+# Felis:
+
+Felis is a way of describing database catalogs, scientific and otherwise, in a language and DBMS agnostic way. It's built on concepts from JSON-LD/RDF and CSVW, but intended to provide a comprehensive way to describe tabular data, using annotations on tables, columns, and schemas, to document scientifically useful metadata as well as implementation-specific metadata for database management systems, file formats, and application data models.
+
+
+
+
+# ---------------------
+# Step 2:
+# ---------------------
+
+Build a tap-schema image that includes these yml files in the build process
+
+To do this, I checkout out the code at:
+  https://github.com/lsst/sdm_schemas/blob/main/tap-schema/build
+and modified the build script to build the image as stvoutsin/tap-schema and push there
+
+To build the schema for our environment, I ran the following command:
+./build roe ../yml/dp01_dc2.yaml ../yml/dp02_dc2.yaml .. (include any new yaml/felis for the new catalogues we are adding here)
+
+
+
+# ---------------------
+# Step 3
+# ---------------------
+
+Modify our tap-schema service in the phalanx repo that we have forked & are deploying from to use the image we created
+(see: https://github.com/LSP-UK/phalanx/blob/feature/uk-qserv/services/tap-schema/values-roe.yaml)
+
+
+# Note: I have asked them whether there is a tool for building these yml files from an SQL database directly or .sql file, but they didn't seem to have any tools for this
+
+# It would probably be helpful or even necessary to build a script to transform .sql files to .yml files for the catalogue metadata
+
+
+
+# ---------------------
+# Step 4
+# ---------------------
+
+Redeploy the RSP
