@@ -1,0 +1,161 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2023, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+
+
+# -----------------------------------------------------
+# Deploying the RSP with Magnum
+# -----------------------------------------------------
+
+
+# Assumptions:
+ - We are running on an (admin) node with Docker installed
+ - The floating IP that our configuration uses as the LoadBalancer is available (192.41.122.16)
+
+
+# -------------------------------------------------
+# Setup your clouds configuration file
+# user@admin-node
+
+# Placed under ${HOME:?}/clouds-iris.yaml or elsewhere (but note that the ansibler container path below should then change)
+
+
+# -------------------------------------------------
+# Fetch your openrc.sh file from Openstack
+# user@admin-node
+
+# Placed under ${HOME:?}/RSP-openrc.sh or elsewhere (but note that the ansibler container path below should then change)
+
+
+# ---------------------------------------------------------
+# Run the ansibler container (Includes openstack client)
+# user@admin-node
+
+    clientname=ansibler-iris
+
+    sudo docker run \
+        --rm \
+        --tty \
+        --interactive \
+        --name     "${clientname:?}" \
+        --hostname "${clientname:?}" \
+        --volume "${HOME:?}/clouds-iris.yaml:/etc/openstack/clouds.yaml:ro,z" \
+        --volume "${HOME:?}/RSP-openrc.sh:/etc/openstack/RSP-openrc.sh:ro,z" \
+        ghcr.io/wfau/atolmis/ansible-client:2022.07.25 \
+        bash
+
+
+# ---------------------------------------------------------
+# Run the OpenRC to load Openstack credentials
+# root@ansibler-iris
+
+    source /etc/openstack/RSP-openrc.sh 
+
+
+# Optionally create template ..
+
+# The template we are using has the following attributes:
+
+	Master Flavor ID: qserv-utility
+	Volume Driver:  cinder
+	Image ID: fedora-coreos-35.20211203.3.0
+	Network Driver: calico
+	boot_volume_size: 50
+
+
+
+# ---------------------------------------------------------
+# Create Cluster with Openstack Client / Magnum
+# Note: Adding extra labels to disable the Magnum PSP
+# root@ansibler-iris
+
+openstack coe cluster create --cluster-template stv-template-large \
+                             --master-count 1 \
+                             --node-count 2 \
+                             --docker-volume-size 200 \
+                             --labels \
+admission_control_list="NodeRestriction,NamespaceLifecycle,LimitRanger,ServiceAccount,ResourceQuota,TaintNodesByCondition,Priority,DefaultTolerationSeconds,DefaultStorageClass,StorageObjectInUseProtection,PersistentVolumeClaimResize,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,RuntimeClass" \
+                             --merge-labels \
+                             --keypair iris-rsp-1 \
+                             stv-rsp-prod
+                      
+exit
+
+   
+# ---------------------------------------------------------
+# Open ports
+# user@horizon dashboard
+# Can be done using openstack client or Horizon UI
+
+# Ports needed on minion & master node: 
+ 80, 443, 8443, 6379
+ 
+ 
+#----------------------------------------------------------
+# Clone RSP repo (fork)
+# user@admin-node
+
+git clone https://github.com/stvoutsin/phalanx 
+
+pushd phalanx
+
+   git checkout dev/magnum-deploy
+
+
+
+#----------------------------------------------------------
+# Create Openstack Cinder Storage class
+# user@admin-node
+
+ 
+pushd installer
+   
+cat > "storageclass.yml" << EOF
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: kubernetes.io/cinder
+parameters:
+  availability: nova
+EOF
+
+kubectl create -f storageclass.yml
+
+
+
+#----------------------------------------------------------
+# Run installation
+# user@admin-node
+
+VAULT_TOKEN=
+./install.sh roe $VAULT_TOKEN
+
+
+# Navigate to https://rsp.lsst.ac.uk to validate
+
+
+
+
+
+
+
