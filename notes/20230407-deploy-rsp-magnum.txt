@@ -1,0 +1,211 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2023, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+
+
+# -----------------------------------------------------
+# Deploying the RSP with Magnum
+# -----------------------------------------------------
+
+
+# Assumptions:
+ - We are running on an (admin) node with Docker installed
+ - The floating IP that our configuration uses as the LoadBalancer is available (192.41.122.16 for our production service)
+
+# -------------------------------------------------
+# Setup your clouds configuration file
+# user@admin-node
+
+# Placed under ${HOME:?}/clouds-iris.yaml or elsewhere (but note that the ansibler container path below should then change)
+
+
+# -------------------------------------------------
+# Fetch your openrc.sh file from Openstack
+# user@admin-node
+
+# Placed under ${HOME:?}/RSP-openrc.sh or elsewhere (but note that the ansibler container path below should then change)
+
+
+# ---------------------------------------------------------
+# Run the ansibler container (Includes openstack client)
+# user@admin-node
+
+    clientname=ansibler-iris
+
+    sudo docker run \
+        --rm \
+        --tty \
+        --interactive \
+        --name     "${clientname:?}" \
+        --hostname "${clientname:?}" \
+        --volume "${HOME:?}/clouds-iris.yaml:/etc/openstack/clouds.yaml:ro,z" \
+        --volume "${HOME:?}/RSP-openrc.sh:/etc/openstack/RSP-openrc.sh:ro,z" \
+        ghcr.io/wfau/atolmis/ansible-client:2022.07.25 \
+        bash
+
+
+# ---------------------------------------------------------
+# Run the OpenRC to load Openstack credentials
+# root@ansibler-iris
+
+    source /etc/openstack/RSP-openrc.sh 
+
+
+ 
+#----------------------------------------------------------
+# Clone Phalanx installer
+# user@admin-node
+
+    git clone https://github.com/stvoutsin/phlx-installer
+
+
+# ---------------------------------------------------------
+# Optional / One-time step: Create Template
+# root@ansibler-iris
+
+# Optionally create template ..
+
+    pushd phlx-installer/scripts/openstack/
+  
+        ./create_template.sh stv-template-large
+    
+    popd
+
+		              
+# The template we've setup and are using has the following attributes:
+
+	> Master Flavor ID: qserv-utility
+	> Volume Driver:  cinder
+	> Image ID: fedora-coreos-35.20211203.3.0
+	> Network Driver: calico
+	> boot_volume_size: 50
+
+
+
+# ---------------------------------------------------------
+# Create Cluster with Openstack Client / Magnum
+# Note: You may need to modify the parameters in create_cluster.sh (i.e. keypair, template name, number of worker nodes)
+# root@ansibler-iris
+
+    pushd phlx-installer/scripts/openstack/
+    
+        ./create_cluster.sh stv-rsp-prod-blue
+    
+    popd
+
+
+    #  Wait until the cluster has been created .. 
+
+
+   
+# ---------------------------------------------------------
+# Open ports 80, 443, 8443, 6379
+# root@ansibler-iris
+
+    pushd phlx-installer/scripts/openstack/
+   
+        ./open-ports.sh stv-rsp-prod-blue
+    
+    popd
+ 
+ 
+# Note: We need to ensure that the IP address that we will point the Load Balancer to is open
+# i.e. see: https://github.com/lsst-uk/phalanx/blob/upgrade/roe-env-202304/applications/ingress-nginx/values-roe.yaml
+
+
+
+exit
+
+#----------------------------------------------------------
+# Setup & run the phlx installer. 
+# First make sure we have exited the ansibler-container.
+# After clone the phlx-installer on the admin node
+# user@admin-node
+
+    git clone https://github.com/stvoutsin/phlx-installer
+
+
+#----------------------------------------------------------
+# Copy files from Kubernetes master node
+# user@admin-node
+
+	> /etc/kubernetes/admin.conf -> phlx-installer/kube/config
+	> /etc/kubernetes/certs/ca.crt -> phlx-installer/certs/ca.crt
+	> /etc/kubernetes/certs/admin.key -> phlx-installer/certs/admin.key
+	> /etc/kubernetes/certs/admin.crt -> phlx-installer/certs/admin.crt
+
+ 
+#----------------------------------------------------------
+# Build installer
+# user@admin-node
+
+    sudo docker build phlx-installer/ --tag installer
+
+
+#----------------------------------------------------------
+# Create ENVIRONMENT vars for the required deployment params:
+# user@admin-node
+
+export VAULT_TOKEN=YOUR_VAULT_TOKEN
+export REPO=YOUR_PHALANX_REPO
+export BRANCH=YOUR_PHALANX_BRANCH
+export ENVIRONMENT=YOUR_PHALANX_ENVIRONMENT
+export CUR_DIRECTORY=/home/ubuntu # Or whichever directory you have cloned to
+
+
+#----------------------------------------------------------
+# Run Docker install for the RSP:
+# user@admin-node
+
+sudo docker run   \
+  -it  \
+  --hostname installer  \
+  --env REPO=${REPO:?}  \
+  --env VAULT_TOKEN=${VAULT_TOKEN:?}  \
+  --env BRANCH=${BRANCH:?}  \
+  --env ENVIRONMENT=${ENVIRONMENT:?}     \
+  --volume ${CUR_DIRECTORY:?}"/phlx-installer/certs:/etc/kubernetes/certs"  \
+  --volume ${CUR_DIRECTORY:?}"/phlx-installer/kube/config:/root/.kube/config" \
+  --volume ${CUR_DIRECTORY:?}"/phlx-installer/scripts/install.sh:/root/install.sh"  \
+  --volume ${CUR_DIRECTORY:?}"/phlx-installer/scripts/helper.sh:/root/helper.sh" \
+  installer
+
+
+
+# Note, Ensure that the Nodes listed in the Openstack Load Balancer pool that was created, each have a replica of the Nginx Controller running
+# The load balancer pool can be found in the horizon dashboard, or using the openstack client
+
+# To get list of nginx ingress controllers currently running:
+
+
+kubectl  get pods -o wide -n ingress-nginx
+
+NAME                                        READY   STATUS    RESTARTS   AGE   IP              NODE                                    NOMINATED NODE   READINESS GATES
+ingress-nginx-controller-75dcd85b5d-fxb8n   1/1     Running   0          66m   10.100.54.89    stv-rsp-prod-blue-4rcmd6tmp3vv-node-2   <none>           <none>
+ingress-nginx-controller-75dcd85b5d-h5cf8   1/1     Running   0          66m   10.100.54.90    stv-rsp-prod-blue-4rcmd6tmp3vv-node-2   <none>           <none>
+ingress-nginx-controller-75dcd85b5d-k4k6t   1/1     Running   0          84m   10.100.54.75    stv-rsp-prod-blue-4rcmd6tmp3vv-node-2   <none>           <none>
+ingress-nginx-controller-75dcd85b5d-wz7dw   1/1     Running   0          66m   10.100.87.231   stv-rsp-prod-blue-4rcmd6tmp3vv-node-0   <none>           <none>
+ingress-nginx-controller-75dcd85b5d-xbjdx   1/1     Running   0          66m   10.100.87.232   stv-rsp-prod-blue-4rcmd6tmp3vv-node-0   <none>           <none>
+
+
+# In this example, only node-2 and node-0 need to exist in the Load Balancer pool
+
+# Installation Completed
+
