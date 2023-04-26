@@ -1,0 +1,135 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2023, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+
+# ----------------------------------------------------------------
+# Instructions on creating and mounting a Ceph share in Openstack
+# ----------------------------------------------------------------
+
+
+# -------------------------------------------------
+# Create Ceph share using the Openstack Dasbhoard
+
+# Share / Shares / + Create Share
+   
+# Set Protocol to CephFS
+#   Rest of the options to default (Only 1 available option) 
+
+
+# -------------------------------------------------
+# Add access rule to share we just created
+
+
+# Using the Openstack Dashboard:
+#   Navigate to share, click dropdownm select "Manage Rules"
+
+#   + Add Rule
+#     Set Access Type to cephx
+#     Provide a username to the rule (Anything, doesn't have to match a specific user)
+
+
+
+# -------------------------------------------------
+# Add cephfs network interface to existing VM (butler-server)
+# ansible-client or Openstack dashboard
+
+# Using openstack cli: (or Openstack Dashboard)
+
+openstack server add network ${vm_id} ${cephfs_id}
+
+
+
+
+# -------------------------------------------------
+# Modify our netplan on the butler-server
+# Add new interface
+# root@butler-server
+
+
+# Find new interface name:
+
+ifconfg -a
+
+# ens7: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 9000
+# ...
+
+
+
+nano /etc/netplan/50-cloud-init.yaml
+
+network:
+    version: 2
+    ethernets:
+        ens3:
+            dhcp4: true
+            match:
+                macaddress: fa:16:3e:bd:50:b4
+            mtu: 8942
+            set-name: ens3
+        ens7:
+            dhcp4: true
+            mtu: 9000
+            routes:
+            -   to: 10.19.4.0/24
+                via: 10.21.255.254
+
+sudo netplan apply
+
+
+
+# -------------------------------------------------
+# Install ceph libs
+# root@butler-server
+
+apt-get -y install ceph-fuse ceph-common
+
+
+
+# -------------------------------------------------
+# Setup ceph connection keyrings
+# root@butler-server
+
+
+# Create /etc/ceph/ceph.client.${username}.keyring
+#   username = user you created in the Access Rule
+
+[client.${username}]
+key = # KEY_GOES_HERE
+
+
+
+# Create /etc/ceph.conf
+
+[client]
+client quota = true
+mon host = 10.19.4.17:6789,10.19.4.16:6789,10.19.4.18:6789
+
+# Pass in the host values for the share we created above
+
+
+
+# -------------------------------------------------
+# Mount the Ceph share
+# root@butler-server
+
+mount -vvv -t ceph 10.19.4.17:6789,10.19.4.16:6789,10.19.4.18:6789:/volumes/_nogroup/69dfd619-ef0c-45f6-a32f-e629310efba7/8f9f0177-b62e-44d5-abf1-d1f0c0e2e974 /test/ -o name=stv
+
+
+
