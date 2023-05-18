@@ -1,0 +1,85 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2023, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+
+# ---------------------------------------
+# Setting up Vault for use with the RSP
+
+
+# -----------------
+# Setup policy
+
+stvdev.policy:
+
+	path "secret/k8s_operator/stvdev/*" {
+	  capabilities = ["list","read","create", "update","delete"]
+	}
+
+vault policy write stvdev stvdev.policy
+
+
+
+# -----------------
+# Create token
+
+vault token create -policy=stvdev -field=token > stvdev.token
+export VAULT_TOKEN=TOKEN_HERE
+
+
+
+# ------------------------------
+# Create sample key-val secret
+
+vault kv put -mount=secrets/k8s_operator/stvdev foo bar=baz
+
+# ------------------------------
+
+vault secrets enable -path=secrets/k8s_operator/stvdev
+
+
+vault kv put secret/k8s_operator/stvdev/foo foo=bar
+xault kv get secret/k8s_operator/stvdev/foo
+=== Data ===
+Key    Value
+---    -----
+foo    bar
+
+
+
+# Get list of Vault secrets
+
+vault kv list --format=yaml secret/k8s_operator/stvdev
+...
+
+
+
+
+# Now in the phalanx installer dir, we can run the following commands:
+
+export DEV_ENV=env_name
+
+# Clone phalanx repo
+git clone https://github.com/stvoutsin/phalanx
+
+cd installer
+
+./generate_secrets.py $DEV_ENV
+./write_secrets.py $DEV_ENV
+
