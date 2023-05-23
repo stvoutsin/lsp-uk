@@ -1,0 +1,74 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2023, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+
+# ----------------------------------------------------------------
+# Instructions on making a Ceph share mount persist after reboot 
+# ----------------------------------------------------------------
+
+
+# -------------------------------------------------
+# Make sure connection keyrings exist
+# root@butler-server
+
+# cat /etc/ceph/ceph.client.${username}.keyring
+
+[client.${username}]
+key = # Key created in openstack dashboard in rules for share should be here
+
+
+# -------------------------------------------------
+# Create secret file, 
+# It should contain the key of previous step in plain text
+# root@butler-server
+
+vim /etc/ceph/ceph.client.${username}.secret
+# key for that user should be here
+
+
+# -------------------------------------------------
+# Edit filesystem table file to make mount automatic
+# root@butler-server
+
+vim /etc/fstab
+
+#add line in the format: ${ceph_share_path} ${mount_point} ${type} ${options}
+#${ceph_share_path} is specified in openstack dashboard in share details. 
+#'_netdev' option is to ensure that the file system is mounted after the networking subsystem to prevent networking issues
+
+10.19.4.18:6789:/volumes/_nogroup/69dfd619-ef0c-45f6-a32f-e629310efba7/8f9f0177-b62e-44d5-abf1-d1f0c0e2e974 /data/butler ceph name=${username},secretfile=/etc/ceph/ceph.client.${username}.secret,_netdev 0 0
+
+#to check that the file is working
+mount /data/butler
+
+# -------------------------------------------------
+# Check that the share is mounted automatically on reboot
+# root@butler-server
+
+umount /data/butler
+ls /data/butler #should be empty 
+
+# Soft reboot vm from openstack dashboard and log back in
+# root@butler-server
+
+ls /data/butler #should list contents of share
+
+
+
