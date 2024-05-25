@@ -1,0 +1,126 @@
+#
+# <meta:header>
+#   <meta:licence>
+#     Copyright (c) 2022, ROE (http://www.roe.ac.uk/)
+#
+#     This information is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This information is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#   </meta:licence>
+# </meta:header>
+#
+
+
+# Notes on enabling SSO-TAP on RSP instance
+
+
+# --------------------------------------
+# Step 1: Generate Felis metadata files
+# --------------------------------------
+
+Manually create felis (yml) configuration files for the catalogue metadata that we want to add
+
+# https://github.com/lsst/sdm_schemas
+
+
+# --------------------------------------
+# Step 2: Build TAP_SCHEMA image
+# --------------------------------------
+
+Checkout sdm_schemas https://github.com/lsst-uk/sdm_schemas/
+Under sdm_schemas/yml, add the felis metadata file for the databases that should appear under the SSO TAP service.
+
+In the build script sdm_schemas/tap-schema/build change the docker repository from stvoutsin, to the name of the Docker repo that you are pushing to)
+Also add "-sso" to the docker build & push commands so that it looks like this:
+
+  docker build . -t stvoutsin/tap-schema-$ENVIRONMENT-sso:latest
+  docker push stvoutsin/tap-schema-$ENVIRONMENT-sso:latest
+
+This is because we want to build the tap-schema image for sso, but we may/will also want to have a tap-schema Docker image for the QServ TAP, so we need to differentiate the names of the Docker images.
+
+If no repo exists yet (i.e. First time doing this, create a Docker account & repository, you can use DockerHub for now: https://hub.docker.com/)
+
+
+Run build to create and push the TAP_SCHEMA Docker image:
+./build roe ../yml/dp01_dc2.yaml ../yml/dp02_dc2.yaml .. (include a link to each database yaml metadata file that needs to exist in the TAP service here)
+
+Note: The version that we are building, may need to match what is being deployed/is deployed on the production service, so to be sure you can tag the above images that we created with the version deployed and push again. 
+
+
+To find the version number run this on the Kubernetes cluster:
+    
+    kubectl get pod cadc-tap-tap-schema-db-699cf94686-hl4hg -n tap -o jsonpath='{.spec.containers[0].image}'
+
+This will produce output that may look like this:
+
+    stvoutsin/tap-schema-roe-tap:2.6.1
+    
+This means that the image should be tagged like that and pushed, so run:
+
+    docker tag ${docker-repo}/tap-schema-roe-sso:latest ${docker-repo}/tap-schema-roe-sso:2.6.1 
+    docker push ${docker-repo}/tap-schema-roe-sso:2.6.1 
+    
+    (Note: replace ${docker-repo} with the name of the new repo) 
+
+
+
+# -----------------------------------------------
+# Step 3: Update Phalanx charts (config) for roe
+# -----------------------------------------------
+
+Clone https://github.com/lsst-uk/phalanx repo 
+
+Change the DockerHub repo & docker image to the new one that we just pushed:
+  See: https://github.com/lsst-uk/phalanx/blob/master/applications/tap/values-roe.yaml#L4
+  
+
+Create a file named values-roe.yaml under with the following content:
+
+cadc-tap:
+  tapSchema:
+    image:
+      repository: "{dockerhubrepo}/{tap-schema-image}"
+
+Note: Replace dockerhubrepo with the repo created above, and tap-schema-image with the name of the image that was just pushed (Probably: "tap-schema-roe-sso")
+
+
+Now change the environment under phalanx/environments/values-roe.yaml to include it:
+
+name: "roe"
+fqdn: "rsp.lsst.ac.uk"
+appOfAppsName: "science-platform"
+vaultUrl: "https://vault.lsst.ac.uk"
+vaultPathPrefix: "secret/k8s_operator/roe"
+
+applications:
+  mobu: true
+  nublado: true
+  portal: true
+  postgres: true
+  squareone: true
+  tap: true
+  ssotap: true
+  
+  
+# Commit & Push to Github
+# Note: Proper way should be to do a Pull request to the main lsst-sqre repo https://github.com/lsst-sqre/phalanx/ . I would then approve the changes and then you would sync / pull the changes from the lsst-uk/phalanx repo which is forked from the lsst-sqre/phalanx. This would make it easier to have the fork be in sync with the upstream repo and avoid the situation where the uk fork is ahead by some commits & falls behind by others, potentially leading to conflicts. If this has to happen, i.e. for a quick fix, you can still PR the changes, and then rebase so that the history matches the lsst-sqre one.
+
+# Ideally all the above should first be run on the test environment (lsst-uk/phalanx-test)
+  
+
+
+# -----------------------------------------------
+# Step 4: Run ArgoCD Sync
+# -----------------------------------------------
+
+In the ArgoCD Dashboard, run the Sync process on the "science-platform" app
+
